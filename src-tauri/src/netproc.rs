@@ -51,6 +51,10 @@ pub fn start() -> NetProc {
         .name("etw-netproc".into())
         .spawn(move || {
             let provider = Provider::by_guid(KERNEL_NETWORK_GUID)
+                // Capture every keyword and level: the Kernel-Network data events
+                // carry keywords, so the default mask (0) would filter them all out.
+                .any(u64::MAX)
+                .level(0xff)
                 .add_callback(move |record: &EventRecord, sl: &SchemaLocator| {
                     let id = record.event_id();
                     let is_send = SEND_IDS.contains(&id);

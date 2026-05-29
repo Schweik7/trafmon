@@ -42,6 +42,49 @@ fn hide_detail(app: AppHandle) {
     }
 }
 
+/// Whether this process has an elevated (Administrator) token.
+fn is_elevated() -> bool {
+    use windows::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows::Win32::Security::{
+        GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
+    };
+    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+    unsafe {
+        let mut token = HANDLE::default();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).is_err() {
+            return false;
+        }
+        let mut elevation = TOKEN_ELEVATION::default();
+        let mut ret_len = 0u32;
+        let ok = GetTokenInformation(
+            token,
+            TokenElevation,
+            Some(&mut elevation as *mut _ as *mut core::ffi::c_void),
+            std::mem::size_of::<TOKEN_ELEVATION>() as u32,
+            &mut ret_len,
+        )
+        .is_ok();
+        let _ = CloseHandle(token);
+        ok && elevation.TokenIsElevated != 0
+    }
+}
+
+/// Relaunch the current executable elevated (UAC), then exit this instance.
+fn relaunch_as_admin(app: &AppHandle) {
+    if let Ok(exe) = std::env::current_exe() {
+        let _ = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-WindowStyle",
+                "Hidden",
+                "-Command",
+                &format!("Start-Process -FilePath '{}' -Verb RunAs", exe.display()),
+            ])
+            .spawn();
+        app.exit(0);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -61,9 +104,14 @@ pub fn run() {
                 (g.interface_list(), g.current_interface())
             };
 
+            let elevated = is_elevated();
+
             let toggle = MenuItemBuilder::with_id("toggle", "显示 / 隐藏").build(app)?;
             let theme = MenuItemBuilder::with_id("theme", "切换主题").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
+            // Only meaningful when not elevated: per-process speed needs admin.
+            let elevate =
+                MenuItemBuilder::with_id("elevate", "显示详情（需以管理员身份运行）").build(app)?;
 
             // Network-card submenu (checkable, current one ticked).
             let mut nic_items = Vec::new();
@@ -100,14 +148,15 @@ pub fn run() {
             }
             let opacity_menu = op_builder.build()?;
 
-            let menu = MenuBuilder::new(app)
+            let mut menu_builder = MenuBuilder::new(app)
                 .item(&toggle)
                 .item(&nic_menu)
                 .item(&opacity_menu)
-                .item(&theme)
-                .separator()
-                .item(&quit)
-                .build()?;
+                .item(&theme);
+            if !elevated {
+                menu_builder = menu_builder.separator().item(&elevate);
+            }
+            let menu = menu_builder.separator().item(&quit).build()?;
 
             let nic_cb = nic_items.clone();
             let op_cb = op_items.clone();
@@ -121,6 +170,8 @@ pub fn run() {
                     let id = event.id().as_ref();
                     if id == "quit" {
                         app.exit(0);
+                    } else if id == "elevate" {
+                        relaunch_as_admin(app);
                     } else if id == "toggle" {
                         if let Some(w) = app.get_webview_window("main") {
                             if w.is_visible().unwrap_or(true) {
