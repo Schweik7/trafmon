@@ -1,171 +1,117 @@
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ── Themes ── */
 :root {
-  --radius: 10px;
+  --radius: 12px;
   --font: 'Segoe UI', system-ui, sans-serif;
-  --trans: 0.22s ease;
+  --trans: 0.2s ease;
 }
 
+/* ── Themes ── */
 [data-theme="dark"] {
-  --bg:        rgba(18, 18, 24, 0.88);
-  --bg-hover:  rgba(22, 22, 30, 0.96);
-  --border:    rgba(255, 255, 255, 0.08);
-  --text:      #e0e0e0;
-  --muted:     #888;
-  --accent-up: #4fc3f7;
-  --accent-dn: #81c784;
-  --bar-bg:    rgba(255,255,255,0.06);
-  --bar-up:    #4fc3f7;
-  --bar-dn:    #81c784;
-  --btn-bg:    rgba(255,255,255,0.08);
-  --btn-hover: rgba(255,255,255,0.16);
+  --bg:        rgba(38, 38, 40, 0.92);
+  --border:    rgba(255, 255, 255, 0.10);
+  --fg:        #f5f5f5;
+  --muted:     #9a9a9a;
+  --bar-bg:    rgba(255, 255, 255, 0.08);
+  --bar-fill:  #6ca8ff;
+  --btn-hover: rgba(255, 255, 255, 0.12);
+  --active:    #6ca8ff;
 }
 
 [data-theme="light"] {
-  --bg:        rgba(245, 246, 250, 0.90);
-  --bg-hover:  rgba(240, 241, 248, 0.98);
-  --border:    rgba(0, 0, 0, 0.08);
-  --text:      #1a1a2e;
-  --muted:     #777;
-  --accent-up: #1976d2;
-  --accent-dn: #388e3c;
-  --bar-bg:    rgba(0,0,0,0.06);
-  --bar-up:    #1976d2;
-  --bar-dn:    #388e3c;
-  --btn-bg:    rgba(0,0,0,0.06);
-  --btn-hover: rgba(0,0,0,0.12);
+  --bg:        rgba(248, 249, 252, 0.94);
+  --border:    rgba(0, 0, 0, 0.10);
+  --fg:        #1a1a1e;
+  --muted:     #6a6a6a;
+  --bar-bg:    rgba(0, 0, 0, 0.07);
+  --bar-fill:  #2f6fe0;
+  --btn-hover: rgba(0, 0, 0, 0.10);
+  --active:    #2f6fe0;
 }
 
-/* ── Body ── */
 html, body {
   width: 100%; height: 100%;
   background: transparent;
   overflow: hidden;
   user-select: none;
+  cursor: default;
 }
 
 /* ── Widget container ── */
 #widget {
   position: fixed;
   top: 0; left: 0;
-  width: 200px;
+  width: 100%;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  color: var(--text);
+  color: var(--fg);
   font-family: var(--font);
-  font-size: 12px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: background var(--trans), height var(--trans);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: background var(--trans);
   overflow: hidden;
 }
 
-/* ── Titlebar (drag region) ── */
-#titlebar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 8px 2px;
-  cursor: move;
-  -webkit-app-region: drag;
-  height: 20px;
-}
-
-#iface-label {
-  font-size: 9px;
-  color: var(--muted);
-  letter-spacing: 0.03em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 120px;
-}
-
-#controls {
-  -webkit-app-region: no-drag;
-  display: flex;
-  gap: 4px;
-}
-
-#theme-btn {
-  background: var(--btn-bg);
-  border: none;
-  color: var(--muted);
-  font-size: 9px;
-  width: 16px; height: 16px;
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: background var(--trans), color var(--trans);
-  line-height: 1;
-  padding: 0;
-}
-#theme-btn:hover { background: var(--btn-hover); color: var(--text); }
-
-/* ── Net display (2 lines) ── */
+/* ── Compact 2-line speed ── */
 #net-display {
-  padding: 2px 10px 6px;
+  padding: 8px 12px;
 }
 
 .net-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 22px;
+  gap: 8px;
+  height: 27px;
 }
 
 .arrow {
-  font-size: 10px;
-  width: 10px;
+  width: 15px;
+  height: 15px;
   flex-shrink: 0;
+  fill: var(--fg);
 }
-.up-arrow   { color: var(--accent-up); }
-.down-arrow { color: var(--accent-dn); }
 
 .speed {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
-  min-width: 80px;
+  white-space: nowrap;
 }
-#row-up .speed   { color: var(--accent-up); }
-#row-down .speed { color: var(--accent-dn); }
 
 /* ── Process panel (hover-expand) ── */
 #process-panel {
   max-height: 0;
   overflow: hidden;
-  transition: max-height 0.28s ease, padding var(--trans);
-  padding: 0 10px;
-  border-top: 0px solid var(--border);
+  transition: max-height 0.26s ease, padding var(--trans);
+  padding: 0 12px;
+  border-top: 0 solid var(--border);
 }
 
-#widget:hover #process-panel {
-  max-height: 220px;
-  padding: 6px 10px 8px;
+#widget.expanded #process-panel {
+  max-height: 600px;
+  padding: 8px 12px 10px;
   border-top-width: 1px;
 }
 
-.proc-section + .proc-section { margin-top: 7px; }
+.proc-section + .proc-section { margin-top: 8px; }
 
 .proc-title {
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   color: var(--muted);
   text-transform: uppercase;
-  margin-bottom: 3px;
+  margin-bottom: 4px;
 }
 
 .proc-row {
   display: flex;
   align-items: center;
-  gap: 5px;
-  margin-bottom: 3px;
+  gap: 6px;
+  margin-bottom: 4px;
 }
 
 .proc-name {
@@ -174,11 +120,10 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text);
 }
 
 .proc-bar-wrap {
-  width: 48px;
+  width: 42px;
   height: 4px;
   background: var(--bar-bg);
   border-radius: 2px;
@@ -188,35 +133,32 @@ html, body {
 
 .proc-bar {
   height: 100%;
+  background: var(--bar-fill);
   border-radius: 2px;
   transition: width 0.4s ease;
 }
-.cpu-bar { background: var(--bar-up); }
-.mem-bar { background: var(--bar-dn); }
 
 .proc-pct {
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   color: var(--muted);
-  width: 30px;
+  width: 38px;
   text-align: right;
   flex-shrink: 0;
 }
 
 /* ── Interface switcher ── */
-#iface-section { margin-top: 7px; }
-
 .iface-btn {
   display: block;
   width: 100%;
   text-align: left;
   background: var(--bar-bg);
   border: 1px solid transparent;
-  border-radius: 4px;
-  color: var(--text);
+  border-radius: 5px;
+  color: var(--fg);
   font-size: 10px;
-  padding: 2px 6px;
-  margin-bottom: 2px;
+  padding: 3px 7px;
+  margin-bottom: 3px;
   cursor: pointer;
   transition: background var(--trans), border-color var(--trans);
   font-family: var(--font);
@@ -225,4 +167,4 @@ html, body {
   white-space: nowrap;
 }
 .iface-btn:hover { background: var(--btn-hover); }
-.iface-btn.active { border-color: var(--accent-up); color: var(--accent-up); }
+.iface-btn.active { border-color: var(--active); color: var(--active); }

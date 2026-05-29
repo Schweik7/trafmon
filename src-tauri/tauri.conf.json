@@ -7,19 +7,20 @@
     "frontendDist": "../src"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "trafmon",
-        "width": 200,
-        "height": 72,
-        "minWidth": 160,
-        "minHeight": 56,
+        "width": 150,
+        "height": 70,
         "resizable": false,
         "decorations": false,
         "alwaysOnTop": true,
         "transparent": true,
         "skipTaskbar": true,
-        "shadow": false
+        "shadow": false,
+        "maximizable": false,
+        "minimizable": false
       }
     ],
     "security": {

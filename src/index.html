@@ -8,27 +8,23 @@
 </head>
 <body>
   <div id="widget" data-theme="dark">
-    <!-- Drag handle + theme toggle -->
-    <div id="titlebar">
-      <span id="iface-label" title="点击切换网卡"></span>
-      <div id="controls">
-        <button id="theme-btn" title="切换主题">●</button>
-      </div>
-    </div>
-
-    <!-- Main 2-line display -->
+    <!-- Compact 2-line speed display -->
     <div id="net-display">
-      <div class="net-row" id="row-up">
-        <span class="arrow up-arrow">▲</span>
-        <span class="speed" id="upload-speed">-- KB/s</span>
+      <div class="net-row">
+        <svg class="arrow" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3 L21 13 H15.5 V21 H8.5 V13 H3 Z" />
+        </svg>
+        <span class="speed" id="upload-speed">0.0 KB/s</span>
       </div>
-      <div class="net-row" id="row-down">
-        <span class="arrow down-arrow">▼</span>
-        <span class="speed" id="download-speed">-- KB/s</span>
+      <div class="net-row">
+        <svg class="arrow" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 21 L3 11 H8.5 V3 H15.5 V11 H21 Z" />
+        </svg>
+        <span class="speed" id="download-speed">0.0 KB/s</span>
       </div>
     </div>
 
-    <!-- Hover-expand process panel -->
+    <!-- Hover-expand process + interface panel -->
     <div id="process-panel">
       <div class="proc-section">
         <div class="proc-title">CPU</div>
@@ -38,14 +34,13 @@
         <div class="proc-title">MEM</div>
         <div id="mem-list"></div>
       </div>
-      <!-- Network card switcher -->
-      <div class="proc-section" id="iface-section">
+      <div class="proc-section">
         <div class="proc-title">网卡</div>
         <div id="iface-list"></div>
       </div>
     </div>
   </div>
 
-  <script type="module" src="main.js"></script>
+  <script src="main.js"></script>
 </body>
 </html>

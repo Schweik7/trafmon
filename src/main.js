@@ -1,68 +1,112 @@
 const { invoke } = window.__TAURI__.core;
+const { getCurrentWindow, LogicalSize } = window.__TAURI__.window;
+const appWindow = getCurrentWindow();
+
+// ── Window size presets ──
+const COLLAPSED_W = 150;
+const COLLAPSED_H = 70;
+const EXPANDED_W = 200;
 
 // ── State ──
 let currentIface = '';
 let allIfaces = [];
+let expanded = false;
 
 // ── DOM refs ──
+const widget     = document.getElementById('widget');
 const uploadEl   = document.getElementById('upload-speed');
 const downloadEl = document.getElementById('download-speed');
 const cpuList    = document.getElementById('cpu-list');
 const memList    = document.getElementById('mem-list');
 const ifaceList  = document.getElementById('iface-list');
-const ifaceLabel = document.getElementById('iface-label');
-const themeBtn   = document.getElementById('theme-btn');
-const widget     = document.getElementById('widget');
 
-// ── Theme ──
-const savedTheme = localStorage.getItem('theme') || 'dark';
-widget.dataset.theme = savedTheme;
-themeBtn.addEventListener('click', () => {
+// ── Theme (persisted; toggled via right-click) ──
+widget.dataset.theme = localStorage.getItem('theme') || 'dark';
+widget.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
   const next = widget.dataset.theme === 'dark' ? 'light' : 'dark';
   widget.dataset.theme = next;
   localStorage.setItem('theme', next);
 });
 
-// ── Speed formatter ──
+// ── Drag from anywhere (except interface buttons) ──
+widget.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  if (e.target.closest('.iface-btn')) return;
+  appWindow.startDragging();
+});
+
+// ── Hover expand/collapse with window resize ──
+async function resizeToContent() {
+  const h = Math.ceil(widget.scrollHeight);
+  await appWindow.setSize(new LogicalSize(EXPANDED_W, h));
+}
+
+widget.addEventListener('mouseenter', async () => {
+  expanded = true;
+  widget.classList.add('expanded');
+  await resizeToContent();
+});
+
+widget.addEventListener('mouseleave', async () => {
+  expanded = false;
+  widget.classList.remove('expanded');
+  await appWindow.setSize(new LogicalSize(COLLAPSED_W, COLLAPSED_H));
+});
+
+// ── Speed formatter: keeps to ~4 digits, switches unit ──
 function fmtSpeed(bps) {
-  if (bps >= 1_048_576) return (bps / 1_048_576).toFixed(1) + ' MB/s';
-  if (bps >= 1024)      return (bps / 1024).toFixed(0) + ' KB/s';
-  return bps + ' B/s';
+  const kb = bps / 1024;
+  if (kb < 1000) return kb.toFixed(1) + ' KB/s';
+  const mb = kb / 1024;
+  if (mb < 1000) return mb.toFixed(1) + ' MB/s';
+  return (mb / 1024).toFixed(1) + ' GB/s';
 }
 
 // ── Render process rows ──
-function renderProcs(container, entries, barClass) {
+function renderProcs(container, entries) {
   container.innerHTML = '';
   for (const e of entries) {
     const pct = Math.min(e.value, 100);
     const row = document.createElement('div');
     row.className = 'proc-row';
-    row.innerHTML = `
-      <span class="proc-name" title="${e.name}">${e.name}</span>
-      <div class="proc-bar-wrap"><div class="proc-bar ${barClass}" style="width:${pct}%"></div></div>
-      <span class="proc-pct">${pct.toFixed(1)}%</span>`;
+    const name = document.createElement('span');
+    name.className = 'proc-name';
+    name.title = e.name;
+    name.textContent = e.name;
+    const barWrap = document.createElement('div');
+    barWrap.className = 'proc-bar-wrap';
+    const bar = document.createElement('div');
+    bar.className = 'proc-bar';
+    bar.style.width = pct + '%';
+    barWrap.appendChild(bar);
+    const pctEl = document.createElement('span');
+    pctEl.className = 'proc-pct';
+    pctEl.textContent = pct.toFixed(1) + '%';
+    row.append(name, barWrap, pctEl);
     container.appendChild(row);
   }
 }
 
-// ── Render iface buttons ──
+// ── Render interface switcher ──
 function renderIfaces(ifaces, active) {
   ifaceList.innerHTML = '';
   for (const name of ifaces) {
     const btn = document.createElement('button');
     btn.className = 'iface-btn' + (name === active ? ' active' : '');
     btn.textContent = name;
-    btn.addEventListener('click', async () => {
+    btn.title = name;
+    btn.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
       await invoke('set_interface', { name });
       currentIface = name;
-      ifaceLabel.textContent = name;
       renderIfaces(allIfaces, name);
     });
     ifaceList.appendChild(btn);
   }
 }
 
-// ── Poll net stats every second ──
+// ── Poll network every second ──
 async function pollNet() {
   try {
     const stats = await invoke('get_net_stats');
@@ -72,8 +116,8 @@ async function pollNet() {
     if (stats.interface !== currentIface || stats.interfaces.length !== allIfaces.length) {
       currentIface = stats.interface;
       allIfaces    = stats.interfaces;
-      ifaceLabel.textContent = currentIface;
       renderIfaces(allIfaces, currentIface);
+      if (expanded) resizeToContent();
     }
   } catch (e) {
     console.error('net poll error', e);
@@ -85,16 +129,14 @@ async function pollNet() {
 async function pollProcs() {
   try {
     const procs = await invoke('get_top_processes');
-    renderProcs(cpuList, procs.cpu, 'cpu-bar');
-    renderProcs(memList, procs.mem, 'mem-bar');
+    renderProcs(cpuList, procs.cpu);
+    renderProcs(memList, procs.mem);
+    if (expanded) resizeToContent();
   } catch (e) {
     console.error('proc poll error', e);
   }
   setTimeout(pollProcs, 2000);
 }
-
-// ── Dragging (fallback JS drag for non-drag-region areas) ──
-// Tauri's data-tauri-drag-region handles the titlebar; nothing else needed.
 
 pollNet();
 pollProcs();
