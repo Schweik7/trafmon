@@ -1,6 +1,10 @@
 //! Per-process network throughput via ETW (Microsoft-Windows-Kernel-Network).
 //! Starting a real-time ETW session requires Administrator privileges; when that
 //! fails we expose `available() == false` and the UI falls back to a hint.
+//!
+//! NOTE: do not set `.any()/.level()` on the provider. ETW treats
+//! `MatchAnyKeyword == 0` (the default) as "match all", and forcing a non-zero
+//! mask suppresses delivery from this provider.
 
 use ferrisetw::parser::Parser;
 use ferrisetw::provider::Provider;
@@ -13,6 +17,7 @@ use std::sync::{Arc, Mutex};
 
 // Microsoft-Windows-Kernel-Network
 const KERNEL_NETWORK_GUID: &str = "7DD42A49-5329-4832-8DFD-43D979153A88";
+const SESSION_NAME: &str = "Trafmon-NetProc";
 
 // Event IDs that carry a payload `size` for the owning `PID`.
 // TCP: 10/26 send, 11/27 recv (IPv4/IPv6).  UDP: 42/58 send, 43/59 recv.
@@ -38,6 +43,33 @@ impl NetProc {
     }
 }
 
+/// Stop any leftover Trafmon ETW sessions. Sessions outlive their creating
+/// process, and ETW caps a provider at 8 concurrent enables — so leaked
+/// sessions from killed runs eventually block new event delivery. Requires the
+/// current process to be elevated (it is when this feature is in use).
+fn stop_stale_sessions() {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    let Ok(out) = std::process::Command::new("logman")
+        .args(["query", "-ets"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    else {
+        return;
+    };
+    let text = String::from_utf8_lossy(&out.stdout);
+    for line in text.lines() {
+        let name = line.split_whitespace().next().unwrap_or("");
+        if name.starts_with(SESSION_NAME) {
+            let _ = std::process::Command::new("logman")
+                .args(["stop", name, "-ets"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output();
+        }
+    }
+}
+
 /// Start the ETW session on a dedicated, parked thread that owns the trace for
 /// the lifetime of the process. Returns immediately with shared handles.
 pub fn start() -> NetProc {
@@ -50,11 +82,11 @@ pub fn start() -> NetProc {
     std::thread::Builder::new()
         .name("etw-netproc".into())
         .spawn(move || {
+            // Clear leaked sessions from previous (killed) runs first, so we
+            // stay under ETW's per-provider 8-session enable limit.
+            stop_stale_sessions();
+
             let provider = Provider::by_guid(KERNEL_NETWORK_GUID)
-                // Capture every keyword and level: the Kernel-Network data events
-                // carry keywords, so the default mask (0) would filter them all out.
-                .any(u64::MAX)
-                .level(0xff)
                 .add_callback(move |record: &EventRecord, sl: &SchemaLocator| {
                     let id = record.event_id();
                     let is_send = SEND_IDS.contains(&id);
@@ -82,11 +114,10 @@ pub fn start() -> NetProc {
                 })
                 .build();
 
-            // Unique per-process name: ETW sessions outlive their creating
-            // process, so a fixed name collides (AlreadyExist) after a crash/kill.
-            let session = format!("Trafmon-NetProc-{}", std::process::id());
+            // Fixed name; stale instances were stopped above so there is no
+            // collision and at most one session ever exists.
             match UserTrace::new()
-                .named(session)
+                .named(SESSION_NAME.to_string())
                 .enable(provider)
                 .start_and_process()
             {

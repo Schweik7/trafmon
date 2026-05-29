@@ -70,17 +70,26 @@ fn is_elevated() -> bool {
 }
 
 /// Relaunch the current executable elevated (UAC), then exit this instance.
+/// Uses ShellExecuteW("runas") so the elevated process is created by the system
+/// UAC service — it survives this process exiting (unlike a spawned child, which
+/// WebView2's job object would kill when we exit).
 fn relaunch_as_admin(app: &AppHandle) {
+    use windows::core::{w, HSTRING, PCWSTR};
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
     if let Ok(exe) = std::env::current_exe() {
-        let _ = std::process::Command::new("powershell")
-            .args([
-                "-NoProfile",
-                "-WindowStyle",
-                "Hidden",
-                "-Command",
-                &format!("Start-Process -FilePath '{}' -Verb RunAs", exe.display()),
-            ])
-            .spawn();
+        let file = HSTRING::from(exe.as_os_str());
+        unsafe {
+            ShellExecuteW(
+                None,
+                w!("runas"),
+                PCWSTR(file.as_ptr()),
+                PCWSTR::null(),
+                PCWSTR::null(),
+                SW_SHOWNORMAL,
+            );
+        }
         app.exit(0);
     }
 }
