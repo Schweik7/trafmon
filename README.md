@@ -1,98 +1,92 @@
 # trafmon
 
-A tiny, frameless, always-on-top floating widget for Windows that shows live
-network speed at a glance — built with **Rust + Tauri v2**.
+> **中文** · [English](./README.en.md)
+
+一个小巧、无边框、置顶的 Windows 桌面悬浮窗小控件，一眼查看实时网速。基于
+**Rust + Tauri v2** 开发。
 
 ```
  ↑  193.9 KB/s
  ↓  199.5 KB/s
 ```
 
-## Features
+## 功能
 
-- **Compact two-line display** — upload (↑) and download (↓) speed, refreshed
-  every second. Units auto-switch (KB/s → MB/s → GB/s) to stay ~4 digits, with
-  the values right-aligned and units vertically aligned.
-- **Per-process network speed on hover** — a native tooltip lists the top
-  bandwidth-consuming processes with per-process ↑/↓ rates. *(Requires running
-  as Administrator — see below.)*
-- **Network-card selection** — defaults to the Wi-Fi adapter; switch via the
-  tray menu or middle-click.
-- **Day / Night themes** — toggle by right-click or the tray menu; persisted.
-- **System tray menu** — show/hide the widget, pick the network card, set
-  window opacity, switch theme, and quit.
-- **Frameless, translucent, draggable** — drag from anywhere, stays on top,
-  hidden from the taskbar.
+- **紧凑两行显示** —— 上传（↑）和下载（↓）速度，每秒刷新。单位随速度自动切换
+  （KB/s → MB/s → GB/s）以保持约 4 位数字；数值右对齐，单位竖直对齐。
+- **悬停查看进程网速** —— 鼠标悬停时弹出一个独立的小窗，列出占用带宽最多的进程，
+  带颜色区分的每进程 ↑/↓ 速率，**每秒实时刷新**。*（需以管理员身份运行，见下文。）*
+- **网卡选择** —— 默认选中 Wi-Fi 网卡；可通过托盘菜单或中键点击切换。
+- **日间 / 夜间主题** —— 右键或托盘菜单切换，自动持久化。
+- **系统托盘菜单** —— 显示/隐藏小窗、选择网卡、调整窗口不透明度、切换主题、退出。
+- **无边框、半透明、可拖动** —— 任意位置拖动，始终置顶，不在任务栏显示。
 
-## Interactions
+## 交互方式
 
-| Action | Result |
+| 操作 | 效果 |
 | --- | --- |
-| Left-drag anywhere | Move the widget |
-| Hover | Native tooltip with per-process network speed |
-| Right-click | Toggle day / night theme |
-| Middle-click | Cycle to the next network interface |
-| Tray left-click | Show the widget |
-| Tray right-click | Menu: show/hide · network card · opacity · theme · quit |
+| 左键拖动（任意位置） | 移动小窗 |
+| 鼠标悬停 | 弹出实时进程网速详情窗 |
+| 右键 | 切换 日间 / 夜间 主题 |
+| 中键 | 切换到下一个网卡 |
+| 左键单击托盘图标 | 显示小窗 |
+| 右键托盘图标 | 菜单：显示/隐藏 · 网卡 · 不透明度 · 主题 · 退出 |
 
-## Administrator requirement
+## 管理员权限要求
 
-Per-process network throughput is collected via **ETW**
-(`Microsoft-Windows-Kernel-Network`). Starting a real-time ETW session requires
-Administrator privileges. Behaviour:
+每个进程的网络速率通过 **ETW**（`Microsoft-Windows-Kernel-Network`）采集。开启实时
+ETW 会话需要管理员权限。表现如下：
 
-- **Run normally** — the two-line total speed works fine; the hover tooltip
-  shows a hint that admin is required.
-- **Run as Administrator** — the tooltip lists per-process ↑/↓ speeds.
+- **普通运行** —— 两行总网速正常工作；悬停详情窗提示需要管理员权限。
+- **以管理员身份运行** —— 详情窗列出每个进程的 ↑/↓ 速率。
 
-## Tech stack
+## 技术栈
 
-- **Tauri v2** — frameless transparent window, system tray, IPC.
-- **[`sysinfo`](https://crates.io/crates/sysinfo)** — per-interface throughput
-  and PID → process-name mapping.
-- **[`ferrisetw`](https://crates.io/crates/ferrisetw)** — safe ETW consumer for
-  per-process network bytes.
-- Vanilla HTML/CSS/JS frontend (no framework, no bundler).
+- **Tauri v2** —— 无边框透明窗口、系统托盘、前后端 IPC。
+- **[`sysinfo`](https://crates.io/crates/sysinfo)** —— 各网卡吞吐量、PID → 进程名映射。
+- **[`ferrisetw`](https://crates.io/crates/ferrisetw)** —— 安全的 ETW 消费端，采集每进程网络字节数。
+- 原生 HTML/CSS/JS 前端（无框架、无打包器）。
 
-## Development
+## 开发
 
-Prerequisites: [Rust](https://rustup.rs), [Node.js](https://nodejs.org) with
-[pnpm](https://pnpm.io), and the Tauri CLI:
+环境要求：[Rust](https://rustup.rs)、带 [pnpm](https://pnpm.io) 的
+[Node.js](https://nodejs.org)，以及 Tauri CLI：
 
 ```bash
 cargo install tauri-cli --version "^2"
 ```
 
-Run in dev mode:
+开发模式运行：
 
 ```bash
 pnpm install
-pnpm dev          # = cargo tauri dev
+pnpm dev          # 等价于 cargo tauri dev
 ```
 
-Run the Rust unit tests:
+运行 Rust 单元测试：
 
 ```bash
 cd src-tauri && cargo test
 ```
 
-## Build
+## 构建
 
 ```bash
-pnpm build        # = cargo tauri build
+pnpm build        # 等价于 cargo tauri build
 ```
 
-The installer / executable is produced under
-`src-tauri/target/release/bundle/`. To enable per-process network speeds, launch
-the built executable as Administrator.
+产物（安装包 / 可执行文件）位于 `src-tauri/target/release/bundle/`。若需查看每进程网速，
+请以管理员身份启动生成的可执行文件。
 
-## Project layout
+## 项目结构
 
 ```
-src/                 frontend (index.html, style.css, main.js)
+src/                 前端（index.html、style.css、main.js、tooltip.html、tooltip.js）
 src-tauri/
-  src/lib.rs         Tauri commands + system tray
-  src/monitor.rs     interface throughput, NIC selection, per-process rates
-  src/netproc.rs     ETW per-process network collector
-  tauri.conf.json    window config (frameless, transparent, always-on-top)
+  src/lib.rs         Tauri 命令 + 系统托盘
+  src/monitor.rs     网卡吞吐量、网卡选择、每进程速率计算
+  src/netproc.rs     ETW 每进程网络采集
+  tauri.conf.json    窗口配置（无边框、透明、置顶）
 ```
+
+更详细的模块与数据流说明见 [ARCHITECTURE.md](./ARCHITECTURE.md)。
