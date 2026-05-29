@@ -17,6 +17,20 @@ listen('toggle-theme', () => {
 });
 listen('set-opacity', (e) => { tip.style.opacity = String(e.payload); });
 
+// ── Language (persisted; default Chinese) ──
+let lang = localStorage.getItem('lang') || 'zh';
+const T = {
+  zh: { proc: '进程网速', admin: '需以管理员身份运行', nic: '网卡', empty: '— 暂无流量 —' },
+  en: { proc: 'Per-process', admin: 'Run as Administrator', nic: 'NIC', empty: '— no traffic —' },
+};
+const tr = () => T[lang] || T.zh;
+listen('set-lang', async (e) => {
+  lang = e.payload;
+  localStorage.setItem('lang', lang);
+  render(latest);
+  await resizeToContent();
+});
+
 function fmtShort(bps) {
   if (bps >= 1_048_576) return (bps / 1_048_576).toFixed(1) + ' M';
   if (bps >= 1024) return Math.round(bps / 1024) + ' K';
@@ -41,7 +55,7 @@ function renderMsg(headText, msg) {
 }
 
 function renderProcs(info) {
-  head.textContent = `网卡 ${info.interface}`;
+  head.textContent = `${tr().nic} ${info.interface}`;
   list.innerHTML = '';
   for (const p of info.procs) {
     const row = document.createElement('div');
@@ -65,16 +79,23 @@ function renderProcs(info) {
   }
 }
 
+let latest = null;
+function render(info) {
+  if (!info) return;
+  const s = tr();
+  if (!info.available) {
+    renderMsg(s.proc, s.admin);
+  } else if (!info.procs.length) {
+    renderMsg(`${s.nic} ${info.interface}`, s.empty);
+  } else {
+    renderProcs(info);
+  }
+}
+
 async function poll() {
   try {
-    const info = await invoke('get_net_processes');
-    if (!info.available) {
-      renderMsg('进程网速', '需以管理员身份运行');
-    } else if (!info.procs.length) {
-      renderMsg(`网卡 ${info.interface}`, '— 暂无流量 —');
-    } else {
-      renderProcs(info);
-    }
+    latest = await invoke('get_net_processes');
+    render(latest);
     await resizeToContent();
   } catch (e) {
     console.error('detail poll error', e);

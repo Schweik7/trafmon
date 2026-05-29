@@ -2,10 +2,14 @@ mod monitor;
 mod netproc;
 
 use monitor::{MonitorState, NetProcInfo, NetStats, SharedState};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use tauri::menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::menu::{
+    CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItem, MenuItemBuilder, Submenu,
+    SubmenuBuilder,
+};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, Wry};
 
 #[tauri::command]
 fn get_net_stats(state: State<'_, SharedState>) -> NetStats {
@@ -159,16 +163,31 @@ fn relaunch_as_admin(app: &AppHandle) {
 
 /// Show a native "About" dialog with author, version and repository. Runs on
 /// its own thread so the modal box doesn't block the tray event loop.
-fn show_about() {
+fn show_about(en: bool) {
     use windows::core::{HSTRING, PCWSTR};
     use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
 
-    std::thread::spawn(|| {
-        let title = HSTRING::from("关于 trafmon");
-        let body = HSTRING::from(format!(
-            "trafmon  v{}\n\n作者：Schweik7\n仓库：https://github.com/Schweik7/trafmon",
-            env!("CARGO_PKG_VERSION")
-        ));
+    let (title, body) = if en {
+        (
+            "About trafmon".to_string(),
+            format!(
+                "trafmon  v{}\n\nAuthor: Schweik7\nRepository: https://github.com/Schweik7/trafmon",
+                env!("CARGO_PKG_VERSION")
+            ),
+        )
+    } else {
+        (
+            "关于 trafmon".to_string(),
+            format!(
+                "trafmon  v{}\n\n作者：Schweik7\n仓库：https://github.com/Schweik7/trafmon",
+                env!("CARGO_PKG_VERSION")
+            ),
+        )
+    };
+
+    std::thread::spawn(move || {
+        let title = HSTRING::from(title);
+        let body = HSTRING::from(body);
         unsafe {
             MessageBoxW(
                 None,
@@ -178,6 +197,57 @@ fn show_about() {
             );
         }
     });
+}
+
+/// Tray menu handles plus the current language, so the labels can be re-titled
+/// live when the user switches language (and so the About box matches).
+struct TrayUi {
+    toggle: MenuItem<Wry>,
+    theme: MenuItem<Wry>,
+    about: MenuItem<Wry>,
+    quit: MenuItem<Wry>,
+    elevate: Option<MenuItem<Wry>>,
+    nic: Submenu<Wry>,
+    opacity: Submenu<Wry>,
+    language: Submenu<Wry>,
+    lang_zh: CheckMenuItem<Wry>,
+    lang_en: CheckMenuItem<Wry>,
+    is_en: AtomicBool,
+}
+
+/// Re-title every translatable tray label for the chosen language and tick the
+/// matching language entry.
+fn apply_language(ui: &TrayUi, en: bool) {
+    let _ = ui
+        .toggle
+        .set_text(if en { "Show / Hide" } else { "显示 / 隐藏" });
+    let _ = ui
+        .theme
+        .set_text(if en { "Toggle theme" } else { "切换主题" });
+    let _ = ui.about.set_text(if en { "About" } else { "关于" });
+    let _ = ui.quit.set_text(if en { "Quit" } else { "退出" });
+    if let Some(e) = &ui.elevate {
+        let _ = e.set_text(if en {
+            "Show details (run as Administrator)"
+        } else {
+            "显示详情（需以管理员身份运行）"
+        });
+    }
+    let _ = ui.nic.set_text(if en { "Network card" } else { "网卡" });
+    let _ = ui.opacity.set_text(if en { "Opacity" } else { "不透明度" });
+    let _ = ui.language.set_text(if en { "Language" } else { "语言" });
+    let _ = ui.lang_zh.set_checked(!en);
+    let _ = ui.lang_en.set_checked(en);
+    ui.is_en.store(en, Ordering::Relaxed);
+}
+
+/// Set the UI language. Called by the frontend on startup (to sync the tray with
+/// the persisted preference) and whenever the language entry is clicked.
+#[tauri::command]
+fn set_language(app: AppHandle, lang: String) {
+    if let Some(ui) = app.try_state::<TrayUi>() {
+        apply_language(ui.inner(), lang == "en");
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -191,6 +261,7 @@ pub fn run() {
             show_detail,
             hide_detail,
             place_detail,
+            set_language,
         ])
         .setup(|app| {
             // Snapshot interfaces for the tray submenu.
@@ -245,15 +316,43 @@ pub fn run() {
             }
             let opacity_menu = op_builder.build()?;
 
+            // Language submenu (default 中文; the frontend re-syncs on startup
+            // from its persisted preference).
+            let lang_zh = CheckMenuItemBuilder::with_id("lang:zh", "中文")
+                .checked(true)
+                .build(app)?;
+            let lang_en = CheckMenuItemBuilder::with_id("lang:en", "English")
+                .checked(false)
+                .build(app)?;
+            let lang_menu = SubmenuBuilder::new(app, "语言")
+                .item(&lang_zh)
+                .item(&lang_en)
+                .build()?;
+
             let mut menu_builder = MenuBuilder::new(app)
                 .item(&toggle)
                 .item(&nic_menu)
                 .item(&opacity_menu)
-                .item(&theme);
+                .item(&theme)
+                .item(&lang_menu);
             if !elevated {
                 menu_builder = menu_builder.separator().item(&elevate);
             }
             let menu = menu_builder.separator().item(&about).item(&quit).build()?;
+
+            app.manage(TrayUi {
+                toggle: toggle.clone(),
+                theme: theme.clone(),
+                about: about.clone(),
+                quit: quit.clone(),
+                elevate: if elevated { None } else { Some(elevate.clone()) },
+                nic: nic_menu.clone(),
+                opacity: opacity_menu.clone(),
+                language: lang_menu.clone(),
+                lang_zh: lang_zh.clone(),
+                lang_en: lang_en.clone(),
+                is_en: AtomicBool::new(false),
+            });
 
             let nic_cb = nic_items.clone();
             let op_cb = op_items.clone();
@@ -268,7 +367,17 @@ pub fn run() {
                     if id == "quit" {
                         app.exit(0);
                     } else if id == "about" {
-                        show_about();
+                        let en = app
+                            .try_state::<TrayUi>()
+                            .map(|ui| ui.is_en.load(Ordering::Relaxed))
+                            .unwrap_or(false);
+                        show_about(en);
+                    } else if id == "lang:zh" || id == "lang:en" {
+                        let en = id == "lang:en";
+                        if let Some(ui) = app.try_state::<TrayUi>() {
+                            apply_language(ui.inner(), en);
+                        }
+                        let _ = app.emit("set-lang", if en { "en" } else { "zh" });
                     } else if id == "elevate" {
                         relaunch_as_admin(app);
                     } else if id == "toggle" {

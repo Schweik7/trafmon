@@ -33,9 +33,15 @@ function setOpacity(v) {
 }
 setOpacity(parseFloat(localStorage.getItem('opacity')) || 1);
 
+// ── Language (persisted; default Chinese). Sync the tray labels on startup to
+// match the saved preference, since the tray is built in Chinese by default. ──
+const savedLang = localStorage.getItem('lang') || 'zh';
+invoke('set_language', { lang: savedLang }).catch(() => {});
+
 // ── Tray -> frontend events ──
 listen('toggle-theme', () => toggleTheme());
 listen('set-opacity', (e) => setOpacity(e.payload));
+listen('set-lang', (e) => localStorage.setItem('lang', e.payload));
 
 // ── Left-drag to move; middle-click cycles network interface ──
 widget.addEventListener('mousedown', (e) => {
