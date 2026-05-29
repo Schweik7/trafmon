@@ -22,17 +22,80 @@ fn set_interface(name: String, state: State<'_, SharedState>) {
     state.lock().unwrap().set_interface(name);
 }
 
-/// Position the detail popup just below the main widget and show it.
+/// Position the detail popup adjacent to the main widget, picking the side with
+/// room so a corner-docked widget still shows its panel fully on-screen.
+/// `panel_w`/`panel_h` are physical pixels.
+fn place_detail_window(app: &AppHandle, panel_w: i32, panel_h: i32) {
+    let (Some(detail), Some(main)) =
+        (app.get_webview_window("detail"), app.get_webview_window("main"))
+    else {
+        return;
+    };
+    let (Ok(mpos), Ok(msize)) = (main.outer_position(), main.outer_size()) else {
+        return;
+    };
+    let scale = main.scale_factor().unwrap_or(1.0);
+    let gap = (4.0 * scale).round() as i32;
+
+    // Work area excludes the taskbar; fall back to a generous rect.
+    let (wx, wy, ww, wh) = match main.current_monitor() {
+        Ok(Some(m)) => {
+            let wa = m.work_area();
+            (wa.position.x, wa.position.y, wa.size.width as i32, wa.size.height as i32)
+        }
+        _ => (mpos.x, mpos.y, 1 << 20, 1 << 20),
+    };
+    let (work_right, work_bottom) = (wx + ww, wy + wh);
+    let main_h = msize.height as i32;
+
+    // Vertical: fit below if it fits, else above, else whichever side is roomier.
+    let space_below = work_bottom - (mpos.y + main_h) - gap;
+    let space_above = mpos.y - wy - gap;
+    let open_below = if panel_h <= space_below {
+        true
+    } else if panel_h <= space_above {
+        false
+    } else {
+        space_below >= space_above
+    };
+    let y = if open_below {
+        mpos.y + main_h + gap
+    } else {
+        mpos.y - panel_h - gap
+    }
+    .clamp(wy, (work_bottom - panel_h).max(wy));
+
+    // Horizontal: align the panel's left edge with the widget, then pull it back
+    // on-screen if it spills past either work-area edge.
+    let mut x = mpos.x;
+    if x + panel_w > work_right {
+        x = work_right - panel_w;
+    }
+    x = x.clamp(wx, (work_right - panel_w).max(wx));
+
+    let _ = detail.set_position(PhysicalPosition::new(x, y));
+}
+
+/// Show the detail popup, positioning it relative to the widget. The frontend
+/// calls `place_detail` again after it resizes to content.
 #[tauri::command]
 fn show_detail(app: AppHandle) {
     let Some(detail) = app.get_webview_window("detail") else { return };
-    if let Some(main) = app.get_webview_window("main") {
-        if let (Ok(pos), Ok(size)) = (main.outer_position(), main.outer_size()) {
-            let _ = detail.set_position(PhysicalPosition::new(pos.x, pos.y + size.height as i32 + 2));
-        }
+    if let Ok(size) = detail.outer_size() {
+        place_detail_window(&app, size.width as i32, size.height as i32);
     }
     let _ = detail.set_ignore_cursor_events(true);
     let _ = detail.show();
+}
+
+/// Reposition the detail popup for its current content size (logical pixels).
+#[tauri::command]
+fn place_detail(app: AppHandle, width: f64, height: f64) {
+    let scale = app
+        .get_webview_window("main")
+        .and_then(|w| w.scale_factor().ok())
+        .unwrap_or(1.0);
+    place_detail_window(&app, (width * scale).round() as i32, (height * scale).round() as i32);
 }
 
 #[tauri::command]
@@ -104,6 +167,7 @@ pub fn run() {
             set_interface,
             show_detail,
             hide_detail,
+            place_detail,
         ])
         .setup(|app| {
             // Snapshot interfaces for the tray submenu.

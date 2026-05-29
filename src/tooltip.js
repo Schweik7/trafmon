@@ -24,7 +24,11 @@ function fmtShort(bps) {
 }
 
 async function resizeToContent() {
-  await appWindow.setSize(new LogicalSize(WIDTH, Math.ceil(tip.scrollHeight)));
+  const height = Math.ceil(tip.scrollHeight);
+  await appWindow.setSize(new LogicalSize(WIDTH, height));
+  // Let the backend re-pick which side of the widget to open on, now that the
+  // panel's size is known (so a corner-docked widget stays fully on-screen).
+  await invoke('place_detail', { width: WIDTH, height });
 }
 
 function renderMsg(headText, msg) {
