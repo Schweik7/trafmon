@@ -10,6 +10,19 @@ network speed at a glance — built with **Rust + Tauri v2**.
  ↓  199.5 KB/s
 ```
 
+![trafmon screenshot](./示意图.png)
+
+## Download
+
+Grab the latest from [Releases](https://github.com/Schweik7/trafmon/releases/latest), or pick directly:
+
+| Installer | Notes |
+| --- | --- |
+| [trafmon_0.1.0_x64_en-US.msi](https://github.com/Schweik7/trafmon/releases/download/v0.1.0/trafmon_0.1.0_x64_en-US.msi) | MSI installer (x64) |
+| [trafmon_0.1.0_x64-setup.exe](https://github.com/Schweik7/trafmon/releases/download/v0.1.0/trafmon_0.1.0_x64-setup.exe) | NSIS installer (x64) |
+
+> 64-bit Windows 10 / 11 only. Run as Administrator to see per-process speeds (see below).
+
 ## Features
 
 - **Compact two-line display** — upload (↑) and download (↓) speed, refreshed
@@ -35,7 +48,7 @@ network speed at a glance — built with **Rust + Tauri v2**.
 | Right-click | Toggle day / night theme |
 | Middle-click | Cycle to the next network interface |
 | Tray left-click | Show the widget |
-| Tray right-click | Menu: show/hide · network card · opacity · theme · quit |
+| Tray right-click | Menu: show/hide · network card · opacity · theme · about · quit |
 
 ## Administrator requirement
 

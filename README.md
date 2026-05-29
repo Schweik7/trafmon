@@ -10,6 +10,19 @@
  ↓  199.5 KB/s
 ```
 
+![trafmon 示意图](./示意图.png)
+
+## 下载安装
+
+前往 [Releases](https://github.com/Schweik7/trafmon/releases/latest) 下载，或直接选择：
+
+| 安装包 | 说明 |
+| --- | --- |
+| [trafmon_0.1.0_x64_en-US.msi](https://github.com/Schweik7/trafmon/releases/download/v0.1.0/trafmon_0.1.0_x64_en-US.msi) | MSI 安装程序（x64） |
+| [trafmon_0.1.0_x64-setup.exe](https://github.com/Schweik7/trafmon/releases/download/v0.1.0/trafmon_0.1.0_x64-setup.exe) | NSIS 安装程序（x64） |
+
+> 仅支持 64 位 Windows 10 / 11。需查看每个进程的网速时，请以管理员身份运行（详见下文）。
+
 ## 功能
 
 - **紧凑两行显示** —— 上传（↑）和下载（↓）速度，每秒刷新。单位随速度自动切换
@@ -30,7 +43,7 @@
 | 右键 | 切换 日间 / 夜间 主题 |
 | 中键 | 切换到下一个网卡 |
 | 左键单击托盘图标 | 显示小窗 |
-| 右键托盘图标 | 菜单：显示/隐藏 · 网卡 · 不透明度 · 主题 · 退出 |
+| 右键托盘图标 | 菜单：显示/隐藏 · 网卡 · 不透明度 · 主题 · 关于 · 退出 |
 
 ## 管理员权限要求
 
