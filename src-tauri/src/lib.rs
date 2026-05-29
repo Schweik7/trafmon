@@ -1,7 +1,7 @@
 mod monitor;
 
 use monitor::{MonitorState, NetStats, SharedState, TopProcesses};
-use once_cell::sync::Mutex;
+use std::sync::Mutex;
 use tauri::State;
 
 #[tauri::command]

@@ -1,4 +1,4 @@
-use once_cell::sync::Mutex;
+use std::sync::Mutex;
 use serde::Serialize;
 use std::collections::HashMap;
 use sysinfo::{Networks, System};
