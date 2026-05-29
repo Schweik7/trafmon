@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>trafmon</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="widget" data-theme="dark">
+    <!-- Drag handle + theme toggle -->
+    <div id="titlebar">
+      <span id="iface-label" title="点击切换网卡"></span>
+      <div id="controls">
+        <button id="theme-btn" title="切换主题">●</button>
+      </div>
+    </div>
+
+    <!-- Main 2-line display -->
+    <div id="net-display">
+      <div class="net-row" id="row-up">
+        <span class="arrow up-arrow">▲</span>
+        <span class="speed" id="upload-speed">-- KB/s</span>
+      </div>
+      <div class="net-row" id="row-down">
+        <span class="arrow down-arrow">▼</span>
+        <span class="speed" id="download-speed">-- KB/s</span>
+      </div>
+    </div>
+
+    <!-- Hover-expand process panel -->
+    <div id="process-panel">
+      <div class="proc-section">
+        <div class="proc-title">CPU</div>
+        <div id="cpu-list"></div>
+      </div>
+      <div class="proc-section">
+        <div class="proc-title">MEM</div>
+        <div id="mem-list"></div>
+      </div>
+      <!-- Network card switcher -->
+      <div class="proc-section" id="iface-section">
+        <div class="proc-title">网卡</div>
+        <div id="iface-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
