@@ -144,6 +144,14 @@ impl MonitorState {
     pub fn set_interface(&mut self, name: String) {
         self.selected_iface = name;
     }
+
+    pub fn interface_list(&self) -> Vec<String> {
+        self.networks.iter().map(|(n, _)| n.clone()).collect()
+    }
+
+    pub fn current_interface(&self) -> String {
+        self.selected_iface.clone()
+    }
 }
 
 // ── Pure helpers (unit-tested below) ──

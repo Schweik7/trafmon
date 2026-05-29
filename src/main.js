@@ -1,5 +1,6 @@
 const { invoke } = window.__TAURI__.core;
 const { getCurrentWindow } = window.__TAURI__.window;
+const { listen } = window.__TAURI__.event;
 const appWindow = getCurrentWindow();
 
 // ── State ──
@@ -15,14 +16,28 @@ const upUnit   = document.getElementById('up-unit');
 const downVal  = document.getElementById('down-val');
 const downUnit = document.getElementById('down-unit');
 
-// ── Theme (persisted; toggled via right-click) ──
+// ── Theme (persisted; toggled via right-click or tray) ──
 widget.dataset.theme = localStorage.getItem('theme') || 'dark';
-widget.addEventListener('contextmenu', (e) => {
-  e.preventDefault();
+function toggleTheme() {
   const next = widget.dataset.theme === 'dark' ? 'light' : 'dark';
   widget.dataset.theme = next;
   localStorage.setItem('theme', next);
+}
+widget.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  toggleTheme();
 });
+
+// ── Opacity (persisted; set from tray submenu) ──
+function setOpacity(v) {
+  widget.style.opacity = String(v);
+  localStorage.setItem('opacity', String(v));
+}
+setOpacity(parseFloat(localStorage.getItem('opacity')) || 1);
+
+// ── Tray -> frontend events ──
+listen('toggle-theme', () => toggleTheme());
+listen('set-opacity', (e) => setOpacity(e.payload));
 
 // ── Left-drag to move; middle-click cycles network interface ──
 widget.addEventListener('mousedown', (e) => {
