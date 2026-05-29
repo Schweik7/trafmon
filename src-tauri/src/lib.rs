@@ -157,6 +157,29 @@ fn relaunch_as_admin(app: &AppHandle) {
     }
 }
 
+/// Show a native "About" dialog with author, version and repository. Runs on
+/// its own thread so the modal box doesn't block the tray event loop.
+fn show_about() {
+    use windows::core::{HSTRING, PCWSTR};
+    use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
+
+    std::thread::spawn(|| {
+        let title = HSTRING::from("关于 trafmon");
+        let body = HSTRING::from(format!(
+            "trafmon  v{}\n\n作者：Schweik7\n仓库：https://github.com/Schweik7/trafmon",
+            env!("CARGO_PKG_VERSION")
+        ));
+        unsafe {
+            MessageBoxW(
+                None,
+                PCWSTR(body.as_ptr()),
+                PCWSTR(title.as_ptr()),
+                MB_OK | MB_ICONINFORMATION,
+            );
+        }
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -181,6 +204,7 @@ pub fn run() {
 
             let toggle = MenuItemBuilder::with_id("toggle", "显示 / 隐藏").build(app)?;
             let theme = MenuItemBuilder::with_id("theme", "切换主题").build(app)?;
+            let about = MenuItemBuilder::with_id("about", "关于").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
             // Only meaningful when not elevated: per-process speed needs admin.
             let elevate =
@@ -229,7 +253,7 @@ pub fn run() {
             if !elevated {
                 menu_builder = menu_builder.separator().item(&elevate);
             }
-            let menu = menu_builder.separator().item(&quit).build()?;
+            let menu = menu_builder.separator().item(&about).item(&quit).build()?;
 
             let nic_cb = nic_items.clone();
             let op_cb = op_items.clone();
@@ -243,6 +267,8 @@ pub fn run() {
                     let id = event.id().as_ref();
                     if id == "quit" {
                         app.exit(0);
+                    } else if id == "about" {
+                        show_about();
                     } else if id == "elevate" {
                         relaunch_as_admin(app);
                     } else if id == "toggle" {
