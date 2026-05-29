@@ -14,6 +14,23 @@
 
 ## 下载安装
 
+### 包管理器一键安装
+
+**Scoop**：
+
+```powershell
+scoop bucket add trafmon https://github.com/Schweik7/scoop-bucket
+scoop install trafmon
+```
+
+**winget**（待 [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) 合并后可用）：
+
+```powershell
+winget install Schweik7.trafmon
+```
+
+### 手动下载
+
 前往 [Releases](https://github.com/Schweik7/trafmon/releases/latest) 下载，或直接选择：
 
 | 安装包 | 说明 |

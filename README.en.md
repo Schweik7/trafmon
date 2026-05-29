@@ -14,6 +14,23 @@ network speed at a glance — built with **Rust + Tauri v2**.
 
 ## Download
 
+### Package managers
+
+**Scoop**:
+
+```powershell
+scoop bucket add trafmon https://github.com/Schweik7/scoop-bucket
+scoop install trafmon
+```
+
+**winget** (available once the [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) PR is merged):
+
+```powershell
+winget install Schweik7.trafmon
+```
+
+### Manual download
+
 Grab the latest from [Releases](https://github.com/Schweik7/trafmon/releases/latest), or pick directly:
 
 | Installer | Notes |
