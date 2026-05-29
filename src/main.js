@@ -6,8 +6,6 @@ const appWindow = getCurrentWindow();
 // ── State ──
 let currentIface = '';
 let allIfaces = [];
-let hovering = false;
-let latestInfo = { available: true, interface: '', procs: [] };
 
 // ── DOM refs ──
 const widget   = document.getElementById('widget');
@@ -52,15 +50,9 @@ widget.addEventListener('auxclick', async (e) => {
   currentIface = next;
 });
 
-// ── Keep the native tooltip stable while hovered (re-assigning title resets
-// WebView2's show timer, so we only set it on enter / when not hovering) ──
-widget.addEventListener('mouseenter', () => {
-  hovering = true;
-  widget.title = buildTooltip(latestInfo);
-});
-widget.addEventListener('mouseleave', () => {
-  hovering = false;
-});
+// ── Hover shows the live detail popup (a separate window, positioned by Rust) ──
+widget.addEventListener('mouseenter', () => invoke('show_detail'));
+widget.addEventListener('mouseleave', () => invoke('hide_detail'));
 
 // ── Formatting ──
 function fmtSpeed(bps) {
@@ -69,28 +61,6 @@ function fmtSpeed(bps) {
   const mb = kb / 1024;
   if (mb < 1000) return { v: mb.toFixed(1), u: 'MB/s' };
   return { v: (mb / 1024).toFixed(1), u: 'GB/s' };
-}
-
-// Compact form for the tooltip (e.g. 1.2M, 64K, 0)
-function fmtShort(bps) {
-  if (bps >= 1_048_576) return (bps / 1_048_576).toFixed(1) + 'M';
-  if (bps >= 1024) return Math.round(bps / 1024) + 'K';
-  return bps + 'B';
-}
-
-// ── Tooltip text (native OS toast via title attribute) ──
-function buildTooltip(info) {
-  const head = `网卡: ${info.interface}` + (allIfaces.length > 1 ? '  (中键切换)' : '');
-  if (!info.available) {
-    return head + '\n\n进程网速需以管理员身份运行 trafmon';
-  }
-  if (!info.procs.length) {
-    return head + '\n\n— 暂无进程网络流量 —';
-  }
-  const lines = info.procs.map(
-    (p) => `${p.name}  ↓${fmtShort(p.down_bps)} ↑${fmtShort(p.up_bps)}`
-  );
-  return [head, '────────────', ...lines].join('\n');
 }
 
 // ── Poll network speed every second ──
@@ -112,16 +82,4 @@ async function pollNet() {
   setTimeout(pollNet, 1000);
 }
 
-// ── Poll per-process net speed for the tooltip every 2 seconds ──
-async function pollProcs() {
-  try {
-    latestInfo = await invoke('get_net_processes');
-    if (!hovering) widget.title = buildTooltip(latestInfo);
-  } catch (e) {
-    console.error('proc poll error', e);
-  }
-  setTimeout(pollProcs, 2000);
-}
-
 pollNet();
-pollProcs();

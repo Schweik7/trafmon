@@ -5,7 +5,7 @@ use monitor::{MonitorState, NetProcInfo, NetStats, SharedState};
 use std::sync::Mutex;
 use tauri::menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State};
 
 #[tauri::command]
 fn get_net_stats(state: State<'_, SharedState>) -> NetStats {
@@ -22,6 +22,26 @@ fn set_interface(name: String, state: State<'_, SharedState>) {
     state.lock().unwrap().set_interface(name);
 }
 
+/// Position the detail popup just below the main widget and show it.
+#[tauri::command]
+fn show_detail(app: AppHandle) {
+    let Some(detail) = app.get_webview_window("detail") else { return };
+    if let Some(main) = app.get_webview_window("main") {
+        if let (Ok(pos), Ok(size)) = (main.outer_position(), main.outer_size()) {
+            let _ = detail.set_position(PhysicalPosition::new(pos.x, pos.y + size.height as i32 + 2));
+        }
+    }
+    let _ = detail.set_ignore_cursor_events(true);
+    let _ = detail.show();
+}
+
+#[tauri::command]
+fn hide_detail(app: AppHandle) {
+    if let Some(detail) = app.get_webview_window("detail") {
+        let _ = detail.hide();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -30,6 +50,8 @@ pub fn run() {
             get_net_stats,
             get_net_processes,
             set_interface,
+            show_detail,
+            hide_detail,
         ])
         .setup(|app| {
             // Snapshot interfaces for the tray submenu.

@@ -13,6 +13,8 @@
   --border: rgba(255, 255, 255, 0.10);
   --fg:     #f5f5f5;
   --muted:  #9a9a9a;
+  --up:     #6ca8ff;
+  --down:   #81c784;
 }
 
 [data-theme="light"] {
@@ -20,6 +22,8 @@
   --border: rgba(0, 0, 0, 0.10);
   --fg:     #1a1a1e;
   --muted:  #6a6a6a;
+  --up:     #2f6fe0;
+  --down:   #388e3c;
 }
 
 html, body {
@@ -77,4 +81,61 @@ html, body {
   font-weight: 600;
   color: var(--muted);
   text-align: left;
+}
+
+/* ── Detail popup window ── */
+#tip {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--fg);
+  font-family: var(--font);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  padding: 7px 9px;
+  overflow: hidden;
+}
+
+#tip-head {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  margin-bottom: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tip-row {
+  display: grid;
+  grid-template-columns: 1fr 56px 56px;
+  align-items: center;
+  column-gap: 6px;
+  height: 19px;
+}
+
+.tip-name {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tip-rate {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+}
+.tip-rate.up   { color: var(--up); }
+.tip-rate.down { color: var(--down); }
+
+.tip-msg {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
 }

@@ -10,9 +10,28 @@
     "withGlobalTauri": true,
     "windows": [
       {
+        "label": "main",
+        "url": "index.html",
         "title": "trafmon",
         "width": 128,
         "height": 66,
+        "resizable": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "transparent": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "maximizable": false,
+        "minimizable": false
+      },
+      {
+        "label": "detail",
+        "url": "tooltip.html",
+        "title": "trafmon-detail",
+        "width": 220,
+        "height": 150,
+        "visible": false,
+        "focus": false,
         "resizable": false,
         "decorations": false,
         "alwaysOnTop": true,
