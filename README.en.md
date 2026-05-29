@@ -18,8 +18,8 @@ Grab the latest from [Releases](https://github.com/Schweik7/trafmon/releases/lat
 
 | Installer | Notes |
 | --- | --- |
-| [trafmon_0.1.0_x64_en-US.msi](https://github.com/Schweik7/trafmon/releases/download/v0.1.0/trafmon_0.1.0_x64_en-US.msi) | MSI installer (x64) |
-| [trafmon_0.1.0_x64-setup.exe](https://github.com/Schweik7/trafmon/releases/download/v0.1.0/trafmon_0.1.0_x64-setup.exe) | NSIS installer (x64) |
+| [trafmon_0.2.0_x64_en-US.msi](https://github.com/Schweik7/trafmon/releases/download/v0.2.0/trafmon_0.2.0_x64_en-US.msi) | MSI installer (x64) |
+| [trafmon_0.2.0_x64-setup.exe](https://github.com/Schweik7/trafmon/releases/download/v0.2.0/trafmon_0.2.0_x64-setup.exe) | NSIS installer (x64) |
 
 > 64-bit Windows 10 / 11 only. Run as Administrator to see per-process speeds (see below).
 
