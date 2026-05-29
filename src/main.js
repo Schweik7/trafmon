@@ -1,24 +1,19 @@
 const { invoke } = window.__TAURI__.core;
-const { getCurrentWindow, LogicalSize } = window.__TAURI__.window;
+const { getCurrentWindow } = window.__TAURI__.window;
 const appWindow = getCurrentWindow();
-
-// ── Window size presets ──
-const COLLAPSED_W = 150;
-const COLLAPSED_H = 70;
-const EXPANDED_W = 200;
 
 // ── State ──
 let currentIface = '';
 let allIfaces = [];
-let expanded = false;
+let hovering = false;
+let latestInfo = { available: true, interface: '', procs: [] };
 
 // ── DOM refs ──
-const widget     = document.getElementById('widget');
-const uploadEl   = document.getElementById('upload-speed');
-const downloadEl = document.getElementById('download-speed');
-const cpuList    = document.getElementById('cpu-list');
-const memList    = document.getElementById('mem-list');
-const ifaceList  = document.getElementById('iface-list');
+const widget   = document.getElementById('widget');
+const upVal    = document.getElementById('up-val');
+const upUnit   = document.getElementById('up-unit');
+const downVal  = document.getElementById('down-val');
+const downUnit = document.getElementById('down-unit');
 
 // ── Theme (persisted; toggled via right-click) ──
 widget.dataset.theme = localStorage.getItem('theme') || 'dark';
@@ -29,109 +24,84 @@ widget.addEventListener('contextmenu', (e) => {
   localStorage.setItem('theme', next);
 });
 
-// ── Drag from anywhere (except interface buttons) ──
+// ── Left-drag to move; middle-click cycles network interface ──
 widget.addEventListener('mousedown', (e) => {
-  if (e.button !== 0) return;
-  if (e.target.closest('.iface-btn')) return;
-  appWindow.startDragging();
+  if (e.button === 0) appWindow.startDragging();
+  if (e.button === 1) e.preventDefault(); // suppress autoscroll
+});
+widget.addEventListener('auxclick', async (e) => {
+  if (e.button !== 1 || allIfaces.length < 2) return;
+  const idx = allIfaces.indexOf(currentIface);
+  const next = allIfaces[(idx + 1) % allIfaces.length];
+  await invoke('set_interface', { name: next });
+  currentIface = next;
 });
 
-// ── Hover expand/collapse with window resize ──
-async function resizeToContent() {
-  const h = Math.ceil(widget.scrollHeight);
-  await appWindow.setSize(new LogicalSize(EXPANDED_W, h));
-}
-
-widget.addEventListener('mouseenter', async () => {
-  expanded = true;
-  widget.classList.add('expanded');
-  await resizeToContent();
+// ── Keep the native tooltip stable while hovered (re-assigning title resets
+// WebView2's show timer, so we only set it on enter / when not hovering) ──
+widget.addEventListener('mouseenter', () => {
+  hovering = true;
+  widget.title = buildTooltip(latestInfo);
+});
+widget.addEventListener('mouseleave', () => {
+  hovering = false;
 });
 
-widget.addEventListener('mouseleave', async () => {
-  expanded = false;
-  widget.classList.remove('expanded');
-  await appWindow.setSize(new LogicalSize(COLLAPSED_W, COLLAPSED_H));
-});
-
-// ── Speed formatter: keeps to ~4 digits, switches unit ──
+// ── Formatting ──
 function fmtSpeed(bps) {
   const kb = bps / 1024;
-  if (kb < 1000) return kb.toFixed(1) + ' KB/s';
+  if (kb < 1000) return { v: kb.toFixed(1), u: 'KB/s' };
   const mb = kb / 1024;
-  if (mb < 1000) return mb.toFixed(1) + ' MB/s';
-  return (mb / 1024).toFixed(1) + ' GB/s';
+  if (mb < 1000) return { v: mb.toFixed(1), u: 'MB/s' };
+  return { v: (mb / 1024).toFixed(1), u: 'GB/s' };
 }
 
-// ── Render process rows ──
-function renderProcs(container, entries) {
-  container.innerHTML = '';
-  for (const e of entries) {
-    const pct = Math.min(e.value, 100);
-    const row = document.createElement('div');
-    row.className = 'proc-row';
-    const name = document.createElement('span');
-    name.className = 'proc-name';
-    name.title = e.name;
-    name.textContent = e.name;
-    const barWrap = document.createElement('div');
-    barWrap.className = 'proc-bar-wrap';
-    const bar = document.createElement('div');
-    bar.className = 'proc-bar';
-    bar.style.width = pct + '%';
-    barWrap.appendChild(bar);
-    const pctEl = document.createElement('span');
-    pctEl.className = 'proc-pct';
-    pctEl.textContent = pct.toFixed(1) + '%';
-    row.append(name, barWrap, pctEl);
-    container.appendChild(row);
+// Compact form for the tooltip (e.g. 1.2M, 64K, 0)
+function fmtShort(bps) {
+  if (bps >= 1_048_576) return (bps / 1_048_576).toFixed(1) + 'M';
+  if (bps >= 1024) return Math.round(bps / 1024) + 'K';
+  return bps + 'B';
+}
+
+// ── Tooltip text (native OS toast via title attribute) ──
+function buildTooltip(info) {
+  const head = `网卡: ${info.interface}` + (allIfaces.length > 1 ? '  (中键切换)' : '');
+  if (!info.available) {
+    return head + '\n\n进程网速需以管理员身份运行 trafmon';
   }
-}
-
-// ── Render interface switcher ──
-function renderIfaces(ifaces, active) {
-  ifaceList.innerHTML = '';
-  for (const name of ifaces) {
-    const btn = document.createElement('button');
-    btn.className = 'iface-btn' + (name === active ? ' active' : '');
-    btn.textContent = name;
-    btn.title = name;
-    btn.addEventListener('click', async (ev) => {
-      ev.stopPropagation();
-      await invoke('set_interface', { name });
-      currentIface = name;
-      renderIfaces(allIfaces, name);
-    });
-    ifaceList.appendChild(btn);
+  if (!info.procs.length) {
+    return head + '\n\n— 暂无进程网络流量 —';
   }
+  const lines = info.procs.map(
+    (p) => `${p.name}  ↓${fmtShort(p.down_bps)} ↑${fmtShort(p.up_bps)}`
+  );
+  return [head, '────────────', ...lines].join('\n');
 }
 
-// ── Poll network every second ──
+// ── Poll network speed every second ──
 async function pollNet() {
   try {
     const stats = await invoke('get_net_stats');
-    uploadEl.textContent   = fmtSpeed(stats.upload_bps);
-    downloadEl.textContent = fmtSpeed(stats.download_bps);
+    const up = fmtSpeed(stats.upload_bps);
+    const down = fmtSpeed(stats.download_bps);
+    upVal.textContent = up.v;
+    upUnit.textContent = up.u;
+    downVal.textContent = down.v;
+    downUnit.textContent = down.u;
 
-    if (stats.interface !== currentIface || stats.interfaces.length !== allIfaces.length) {
-      currentIface = stats.interface;
-      allIfaces    = stats.interfaces;
-      renderIfaces(allIfaces, currentIface);
-      if (expanded) resizeToContent();
-    }
+    currentIface = stats.interface;
+    allIfaces = stats.interfaces;
   } catch (e) {
     console.error('net poll error', e);
   }
   setTimeout(pollNet, 1000);
 }
 
-// ── Poll processes every 2 seconds ──
+// ── Poll per-process net speed for the tooltip every 2 seconds ──
 async function pollProcs() {
   try {
-    const procs = await invoke('get_top_processes');
-    renderProcs(cpuList, procs.cpu);
-    renderProcs(memList, procs.mem);
-    if (expanded) resizeToContent();
+    latestInfo = await invoke('get_net_processes');
+    if (!hovering) widget.title = buildTooltip(latestInfo);
   } catch (e) {
     console.error('proc poll error', e);
   }

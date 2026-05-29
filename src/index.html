@@ -8,36 +8,19 @@
 </head>
 <body>
   <div id="widget" data-theme="dark">
-    <!-- Compact 2-line speed display -->
-    <div id="net-display">
-      <div class="net-row">
-        <svg class="arrow" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 3 L21 13 H15.5 V21 H8.5 V13 H3 Z" />
-        </svg>
-        <span class="speed" id="upload-speed">0.0 KB/s</span>
-      </div>
-      <div class="net-row">
-        <svg class="arrow" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 21 L3 11 H8.5 V3 H15.5 V11 H21 Z" />
-        </svg>
-        <span class="speed" id="download-speed">0.0 KB/s</span>
-      </div>
+    <div class="net-row">
+      <svg class="arrow" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3 L21 13 H15.5 V21 H8.5 V13 H3 Z" />
+      </svg>
+      <span class="value" id="up-val">0.0</span>
+      <span class="unit" id="up-unit">KB/s</span>
     </div>
-
-    <!-- Hover-expand process + interface panel -->
-    <div id="process-panel">
-      <div class="proc-section">
-        <div class="proc-title">CPU</div>
-        <div id="cpu-list"></div>
-      </div>
-      <div class="proc-section">
-        <div class="proc-title">MEM</div>
-        <div id="mem-list"></div>
-      </div>
-      <div class="proc-section">
-        <div class="proc-title">网卡</div>
-        <div id="iface-list"></div>
-      </div>
+    <div class="net-row">
+      <svg class="arrow" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 21 L3 11 H8.5 V3 H15.5 V11 H21 Z" />
+      </svg>
+      <span class="value" id="down-val">0.0</span>
+      <span class="unit" id="down-unit">KB/s</span>
     </div>
   </div>
 

@@ -9,25 +9,17 @@
 
 /* ── Themes ── */
 [data-theme="dark"] {
-  --bg:        rgba(38, 38, 40, 0.92);
-  --border:    rgba(255, 255, 255, 0.10);
-  --fg:        #f5f5f5;
-  --muted:     #9a9a9a;
-  --bar-bg:    rgba(255, 255, 255, 0.08);
-  --bar-fill:  #6ca8ff;
-  --btn-hover: rgba(255, 255, 255, 0.12);
-  --active:    #6ca8ff;
+  --bg:     rgba(38, 38, 40, 0.92);
+  --border: rgba(255, 255, 255, 0.10);
+  --fg:     #f5f5f5;
+  --muted:  #9a9a9a;
 }
 
 [data-theme="light"] {
-  --bg:        rgba(248, 249, 252, 0.94);
-  --border:    rgba(0, 0, 0, 0.10);
-  --fg:        #1a1a1e;
-  --muted:     #6a6a6a;
-  --bar-bg:    rgba(0, 0, 0, 0.07);
-  --bar-fill:  #2f6fe0;
-  --btn-hover: rgba(0, 0, 0, 0.10);
-  --active:    #2f6fe0;
+  --bg:     rgba(248, 249, 252, 0.94);
+  --border: rgba(0, 0, 0, 0.10);
+  --fg:     #1a1a1e;
+  --muted:  #6a6a6a;
 }
 
 html, body {
@@ -38,11 +30,10 @@ html, body {
   cursor: default;
 }
 
-/* ── Widget container ── */
+/* ── Widget ── */
 #widget {
   position: fixed;
-  top: 0; left: 0;
-  width: 100%;
+  inset: 0;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -51,120 +42,39 @@ html, body {
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   transition: background var(--trans);
-  overflow: hidden;
-}
-
-/* ── Compact 2-line speed ── */
-#net-display {
-  padding: 8px 12px;
-}
-
-.net-row {
+  padding: 8px 10px;
   display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+
+/* ── Two aligned rows: [arrow] [right-aligned value] [unit] ── */
+.net-row {
+  display: grid;
+  grid-template-columns: 15px 1fr 38px;
   align-items: center;
-  gap: 8px;
-  height: 27px;
+  column-gap: 7px;
+  height: 26px;
 }
 
 .arrow {
   width: 15px;
   height: 15px;
-  flex-shrink: 0;
   fill: var(--fg);
 }
 
-.speed {
+.value {
   font-size: 15px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-}
-
-/* ── Process panel (hover-expand) ── */
-#process-panel {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 0.26s ease, padding var(--trans);
-  padding: 0 12px;
-  border-top: 0 solid var(--border);
-}
-
-#widget.expanded #process-panel {
-  max-height: 600px;
-  padding: 8px 12px 10px;
-  border-top-width: 1px;
-}
-
-.proc-section + .proc-section { margin-top: 8px; }
-
-.proc-title {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-  text-transform: uppercase;
-  margin-bottom: 4px;
-}
-
-.proc-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
-}
-
-.proc-name {
-  font-size: 11px;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.proc-bar-wrap {
-  width: 42px;
-  height: 4px;
-  background: var(--bar-bg);
-  border-radius: 2px;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.proc-bar {
-  height: 100%;
-  background: var(--bar-fill);
-  border-radius: 2px;
-  transition: width 0.4s ease;
-}
-
-.proc-pct {
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-  width: 38px;
   text-align: right;
-  flex-shrink: 0;
+  letter-spacing: 0.01em;
 }
 
-/* ── Interface switcher ── */
-.iface-btn {
-  display: block;
-  width: 100%;
+.unit {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
   text-align: left;
-  background: var(--bar-bg);
-  border: 1px solid transparent;
-  border-radius: 5px;
-  color: var(--fg);
-  font-size: 10px;
-  padding: 3px 7px;
-  margin-bottom: 3px;
-  cursor: pointer;
-  transition: background var(--trans), border-color var(--trans);
-  font-family: var(--font);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.iface-btn:hover { background: var(--btn-hover); }
-.iface-btn.active { border-color: var(--active); color: var(--active); }

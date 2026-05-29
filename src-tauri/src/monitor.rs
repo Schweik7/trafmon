@@ -1,8 +1,10 @@
+use crate::netproc::{self, NetProc};
 use serde::Serialize;
-use std::cmp::Ordering;
+use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use sysinfo::{Networks, System};
+use std::time::Instant;
+use sysinfo::{Networks, Pid, ProcessesToUpdate, System};
 
 const WIFI_KEYWORDS: [&str; 5] = ["wi-fi", "wifi", "wlan", "wireless", "wi_fi"];
 const LOOPBACK_NAMES: [&str; 2] = ["lo", "Loopback Pseudo-Interface 1"];
@@ -16,15 +18,17 @@ pub struct NetStats {
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
-pub struct ProcessEntry {
+pub struct NetProcEntry {
     pub name: String,
-    pub value: f32,
+    pub up_bps: u64,
+    pub down_bps: u64,
 }
 
 #[derive(Serialize, Clone)]
-pub struct TopProcesses {
-    pub cpu: Vec<ProcessEntry>,
-    pub mem: Vec<ProcessEntry>,
+pub struct NetProcInfo {
+    pub available: bool,
+    pub interface: String,
+    pub procs: Vec<NetProcEntry>,
 }
 
 pub struct MonitorState {
@@ -33,6 +37,9 @@ pub struct MonitorState {
     selected_iface: String,
     prev_rx: HashMap<String, u64>,
     prev_tx: HashMap<String, u64>,
+    netproc: NetProc,
+    prev_proc_counts: HashMap<u32, (u64, u64)>,
+    last_proc_sample: Instant,
 }
 
 impl MonitorState {
@@ -51,11 +58,14 @@ impl MonitorState {
         }
 
         Self {
-            system: System::new_all(),
+            system: System::new(),
             networks,
             selected_iface: selected,
             prev_rx,
             prev_tx,
+            netproc: netproc::start(),
+            prev_proc_counts: HashMap::new(),
+            last_proc_sample: Instant::now(),
         }
     }
 
@@ -87,40 +97,52 @@ impl MonitorState {
         }
     }
 
-    pub fn refresh_processes(&mut self) -> TopProcesses {
-        self.system.refresh_all();
+    pub fn refresh_net_processes(&mut self) -> NetProcInfo {
+        if !self.netproc.available() {
+            return NetProcInfo {
+                available: false,
+                interface: self.selected_iface.clone(),
+                procs: Vec::new(),
+            };
+        }
 
-        let total_mem = self.system.total_memory();
+        let now = Instant::now();
+        let dt = (now - self.last_proc_sample).as_secs_f64().max(0.001);
+        self.last_proc_sample = now;
 
-        let cpu_entries: Vec<ProcessEntry> = self
-            .system
-            .processes()
-            .values()
-            .map(|p| ProcessEntry {
-                name: p.name().to_string_lossy().into_owned(),
-                value: p.cpu_usage(),
-            })
-            .collect();
+        let snapshot = self.netproc.counts_snapshot();
 
-        let mem_pairs: Vec<(String, u64)> = self
-            .system
-            .processes()
-            .values()
-            .map(|p| (p.name().to_string_lossy().into_owned(), p.memory()))
-            .collect();
+        // Need fresh PID -> name mapping for whatever PIDs are active.
+        self.system
+            .refresh_processes(ProcessesToUpdate::All, true);
 
-        TopProcesses {
-            cpu: top_n(cpu_entries, 3),
-            mem: top_n(aggregate_mem(&mem_pairs, total_mem), 3),
+        let mut entries: Vec<NetProcEntry> = Vec::new();
+        for (&pid, &(sent, recv)) in &snapshot {
+            let (psent, precv) = self.prev_proc_counts.get(&pid).copied().unwrap_or((sent, recv));
+            let up = (sent.saturating_sub(psent) as f64 / dt) as u64;
+            let down = (recv.saturating_sub(precv) as f64 / dt) as u64;
+            if up == 0 && down == 0 {
+                continue;
+            }
+            let name = self
+                .system
+                .process(Pid::from_u32(pid))
+                .map(|p| p.name().to_string_lossy().into_owned())
+                .unwrap_or_else(|| format!("PID {pid}"));
+            entries.push(NetProcEntry { name, up_bps: up, down_bps: down });
+        }
+
+        self.prev_proc_counts = snapshot;
+
+        NetProcInfo {
+            available: true,
+            interface: self.selected_iface.clone(),
+            procs: top_net_procs(entries, 5),
         }
     }
 
     pub fn set_interface(&mut self, name: String) {
         self.selected_iface = name;
-    }
-
-    pub fn interfaces(&self) -> Vec<String> {
-        self.networks.iter().map(|(n, _)| n.clone()).collect()
     }
 }
 
@@ -145,26 +167,11 @@ fn pick_default_iface(names: &[String]) -> Option<String> {
     names.first().cloned()
 }
 
-/// Sort entries by value descending and keep the top `n`.
-fn top_n(mut entries: Vec<ProcessEntry>, n: usize) -> Vec<ProcessEntry> {
-    entries.sort_by(|a, b| b.value.partial_cmp(&a.value).unwrap_or(Ordering::Equal));
+/// Sort by combined throughput descending and keep the top `n`.
+fn top_net_procs(mut entries: Vec<NetProcEntry>, n: usize) -> Vec<NetProcEntry> {
+    entries.sort_by_key(|e| Reverse(e.up_bps + e.down_bps));
     entries.truncate(n);
     entries
-}
-
-/// Sum memory by process name, then express each as a percentage of total memory.
-fn aggregate_mem(pairs: &[(String, u64)], total_mem: u64) -> Vec<ProcessEntry> {
-    let total = total_mem.max(1);
-    let mut map: HashMap<String, u64> = HashMap::new();
-    for (name, mem) in pairs {
-        *map.entry(name.clone()).or_default() += *mem;
-    }
-    map.into_iter()
-        .map(|(name, mem)| ProcessEntry {
-            name,
-            value: mem as f32 / total as f32 * 100.0,
-        })
-        .collect()
 }
 
 pub type SharedState = Mutex<MonitorState>;
@@ -184,7 +191,6 @@ mod tests {
 
     #[test]
     fn bps_delta_handles_counter_reset() {
-        // current < prev (e.g. interface reset) must not underflow
         assert_eq!(bps_delta(2000, 100), 0);
     }
 
@@ -218,48 +224,21 @@ mod tests {
     }
 
     #[test]
-    fn top_n_sorts_desc_and_truncates() {
+    fn top_net_procs_sorts_by_total_and_truncates() {
         let entries = vec![
-            ProcessEntry { name: s("a"), value: 1.0 },
-            ProcessEntry { name: s("b"), value: 9.0 },
-            ProcessEntry { name: s("c"), value: 5.0 },
-            ProcessEntry { name: s("d"), value: 3.0 },
+            NetProcEntry { name: s("a"), up_bps: 10, down_bps: 0 },
+            NetProcEntry { name: s("b"), up_bps: 0, down_bps: 500 },
+            NetProcEntry { name: s("c"), up_bps: 100, down_bps: 100 },
         ];
-        let top = top_n(entries, 3);
-        assert_eq!(top.len(), 3);
-        assert_eq!(top[0].name, "b");
-        assert_eq!(top[1].name, "c");
-        assert_eq!(top[2].name, "d");
+        let top = top_net_procs(entries, 2);
+        assert_eq!(top.len(), 2);
+        assert_eq!(top[0].name, "b"); // 500 total
+        assert_eq!(top[1].name, "c"); // 200 total
     }
 
     #[test]
-    fn top_n_handles_fewer_than_n() {
-        let entries = vec![ProcessEntry { name: s("x"), value: 2.0 }];
-        assert_eq!(top_n(entries, 3).len(), 1);
-    }
-
-    #[test]
-    fn aggregate_mem_sums_same_name() {
-        // 8 GB total; "chrome" appears twice (1GB + 1GB) -> 25%
-        let total = 8 * 1024 * 1024 * 1024u64;
-        let one_gb = 1024 * 1024 * 1024u64;
-        let pairs = vec![
-            (s("chrome"), one_gb),
-            (s("chrome"), one_gb),
-            (s("code"), one_gb),
-        ];
-        let mut out = aggregate_mem(&pairs, total);
-        out.sort_by(|a, b| b.value.partial_cmp(&a.value).unwrap());
-        assert_eq!(out[0].name, "chrome");
-        assert!((out[0].value - 25.0).abs() < 0.01);
-        assert!((out[1].value - 12.5).abs() < 0.01);
-    }
-
-    #[test]
-    fn aggregate_mem_guards_zero_total() {
-        let pairs = vec![(s("p"), 100)];
-        // must not divide by zero / produce inf
-        let out = aggregate_mem(&pairs, 0);
-        assert!(out[0].value.is_finite());
+    fn top_net_procs_handles_fewer_than_n() {
+        let entries = vec![NetProcEntry { name: s("x"), up_bps: 1, down_bps: 1 }];
+        assert_eq!(top_net_procs(entries, 5).len(), 1);
     }
 }

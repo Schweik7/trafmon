@@ -1,6 +1,7 @@
 mod monitor;
+mod netproc;
 
-use monitor::{MonitorState, NetStats, SharedState, TopProcesses};
+use monitor::{MonitorState, NetProcInfo, NetStats, SharedState};
 use std::sync::Mutex;
 use tauri::State;
 
@@ -10,13 +11,8 @@ fn get_net_stats(state: State<'_, SharedState>) -> NetStats {
 }
 
 #[tauri::command]
-fn get_top_processes(state: State<'_, SharedState>) -> TopProcesses {
-    state.lock().unwrap().refresh_processes()
-}
-
-#[tauri::command]
-fn get_interfaces(state: State<'_, SharedState>) -> Vec<String> {
-    state.lock().unwrap().interfaces()
+fn get_net_processes(state: State<'_, SharedState>) -> NetProcInfo {
+    state.lock().unwrap().refresh_net_processes()
 }
 
 #[tauri::command]
@@ -30,8 +26,7 @@ pub fn run() {
         .manage(Mutex::new(MonitorState::new()) as SharedState)
         .invoke_handler(tauri::generate_handler![
             get_net_stats,
-            get_top_processes,
-            get_interfaces,
+            get_net_processes,
             set_interface,
         ])
         .run(tauri::generate_context!())
