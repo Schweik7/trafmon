@@ -10,6 +10,7 @@ use tauri::menu::{
 };
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State, Wry};
+use tauri_plugin_autostart::ManagerExt;
 
 #[tauri::command]
 fn get_net_stats(state: State<'_, SharedState>) -> NetStats {
@@ -212,6 +213,7 @@ struct TrayUi {
     language: Submenu<Wry>,
     lang_zh: CheckMenuItem<Wry>,
     lang_en: CheckMenuItem<Wry>,
+    autostart: CheckMenuItem<Wry>,
     is_en: AtomicBool,
 }
 
@@ -236,6 +238,11 @@ fn apply_language(ui: &TrayUi, en: bool) {
     let _ = ui.nic.set_text(if en { "Network card" } else { "网卡" });
     let _ = ui.opacity.set_text(if en { "Opacity" } else { "不透明度" });
     let _ = ui.language.set_text(if en { "Language" } else { "语言" });
+    let _ = ui.autostart.set_text(if en {
+        "Launch at startup"
+    } else {
+        "开机启动"
+    });
     let _ = ui.lang_zh.set_checked(!en);
     let _ = ui.lang_en.set_checked(en);
     ui.is_en.store(en, Ordering::Relaxed);
@@ -253,6 +260,7 @@ fn set_language(app: AppHandle, lang: String) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_autostart::Builder::new().build())
         .manage(Mutex::new(MonitorState::new()) as SharedState)
         .invoke_handler(tauri::generate_handler![
             get_net_stats,
@@ -329,12 +337,19 @@ pub fn run() {
                 .item(&lang_en)
                 .build()?;
 
+            // Auto-start at boot. Reflects the current HKCU Run entry.
+            let autostart_enabled = app.autolaunch().is_enabled().unwrap_or(false);
+            let autostart = CheckMenuItemBuilder::with_id("autostart", "开机启动")
+                .checked(autostart_enabled)
+                .build(app)?;
+
             let mut menu_builder = MenuBuilder::new(app)
                 .item(&toggle)
                 .item(&nic_menu)
                 .item(&opacity_menu)
                 .item(&theme)
-                .item(&lang_menu);
+                .item(&lang_menu)
+                .item(&autostart);
             if !elevated {
                 menu_builder = menu_builder.separator().item(&elevate);
             }
@@ -351,6 +366,7 @@ pub fn run() {
                 language: lang_menu.clone(),
                 lang_zh: lang_zh.clone(),
                 lang_en: lang_en.clone(),
+                autostart: autostart.clone(),
                 is_en: AtomicBool::new(false),
             });
 
@@ -378,6 +394,19 @@ pub fn run() {
                             apply_language(ui.inner(), en);
                         }
                         let _ = app.emit("set-lang", if en { "en" } else { "zh" });
+                    } else if id == "autostart" {
+                        let mgr = app.autolaunch();
+                        let target = !mgr.is_enabled().unwrap_or(false);
+                        let _ = if target {
+                            mgr.enable()
+                        } else {
+                            mgr.disable()
+                        };
+                        if let Some(ui) = app.try_state::<TrayUi>() {
+                            let _ = ui
+                                .autostart
+                                .set_checked(mgr.is_enabled().unwrap_or(target));
+                        }
                     } else if id == "elevate" {
                         relaunch_as_admin(app);
                     } else if id == "toggle" {
