@@ -35,8 +35,8 @@ winget install Schweik7.trafmon
 
 | 安装包 | 说明 |
 | --- | --- |
-| [trafmon_0.2.0_x64_en-US.msi](https://github.com/Schweik7/trafmon/releases/download/v0.2.0/trafmon_0.2.0_x64_en-US.msi) | MSI 安装程序（x64） |
-| [trafmon_0.2.0_x64-setup.exe](https://github.com/Schweik7/trafmon/releases/download/v0.2.0/trafmon_0.2.0_x64-setup.exe) | NSIS 安装程序（x64） |
+| [trafmon_0.3.0_x64_en-US.msi](https://github.com/Schweik7/trafmon/releases/download/v0.3.0/trafmon_0.3.0_x64_en-US.msi) | MSI 安装程序（x64） |
+| [trafmon_0.3.0_x64-setup.exe](https://github.com/Schweik7/trafmon/releases/download/v0.3.0/trafmon_0.3.0_x64-setup.exe) | NSIS 安装程序（x64） |
 
 > 仅支持 64 位 Windows 10 / 11。需查看每个进程的网速时，请以管理员身份运行（详见下文）。
 
