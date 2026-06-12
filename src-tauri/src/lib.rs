@@ -207,7 +207,11 @@ struct TrayUi {
     theme: MenuItem<Wry>,
     about: MenuItem<Wry>,
     quit: MenuItem<Wry>,
-    elevate: Option<MenuItem<Wry>>,
+    /// Always present. Label depends on `is_elevated`: when not elevated, prompts
+    /// the user to relaunch as admin; when elevated, offers a plain restart
+    /// (useful when the long-running ETW session degrades).
+    relaunch: MenuItem<Wry>,
+    is_elevated: bool,
     nic: Submenu<Wry>,
     opacity: Submenu<Wry>,
     language: Submenu<Wry>,
@@ -228,13 +232,12 @@ fn apply_language(ui: &TrayUi, en: bool) {
         .set_text(if en { "Toggle theme" } else { "切换主题" });
     let _ = ui.about.set_text(if en { "About" } else { "关于" });
     let _ = ui.quit.set_text(if en { "Quit" } else { "退出" });
-    if let Some(e) = &ui.elevate {
-        let _ = e.set_text(if en {
-            "Show details (run as Administrator)"
-        } else {
-            "显示详情（需以管理员身份运行）"
-        });
-    }
+    let _ = ui.relaunch.set_text(match (ui.is_elevated, en) {
+        (false, false) => "显示详情（需以管理员身份运行）",
+        (false, true) => "Show details (run as Administrator)",
+        (true, false) => "重启程序",
+        (true, true) => "Restart",
+    });
     let _ = ui.nic.set_text(if en { "Network card" } else { "网卡" });
     let _ = ui.opacity.set_text(if en { "Opacity" } else { "不透明度" });
     let _ = ui.language.set_text(if en { "Language" } else { "语言" });
@@ -285,9 +288,17 @@ pub fn run() {
             let theme = MenuItemBuilder::with_id("theme", "切换主题").build(app)?;
             let about = MenuItemBuilder::with_id("about", "关于").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
-            // Only meaningful when not elevated: per-process speed needs admin.
-            let elevate =
-                MenuItemBuilder::with_id("elevate", "显示详情（需以管理员身份运行）").build(app)?;
+            // Always present. Non-elevated: relaunches via UAC so per-process
+            // speed works. Elevated: plain restart, useful when the long-running
+            // ETW session stops emitting events (see `relaunch_as_admin`:
+            // ShellExecuteW("runas") from an already-elevated process re-launches
+            // elevated without an extra UAC prompt).
+            let relaunch_label = if elevated {
+                "重启程序"
+            } else {
+                "显示详情（需以管理员身份运行）"
+            };
+            let relaunch = MenuItemBuilder::with_id("relaunch", relaunch_label).build(app)?;
 
             // Network-card submenu (checkable, current one ticked).
             let mut nic_items = Vec::new();
@@ -343,24 +354,27 @@ pub fn run() {
                 .checked(autostart_enabled)
                 .build(app)?;
 
-            let mut menu_builder = MenuBuilder::new(app)
+            let menu = MenuBuilder::new(app)
                 .item(&toggle)
                 .item(&nic_menu)
                 .item(&opacity_menu)
                 .item(&theme)
                 .item(&lang_menu)
-                .item(&autostart);
-            if !elevated {
-                menu_builder = menu_builder.separator().item(&elevate);
-            }
-            let menu = menu_builder.separator().item(&about).item(&quit).build()?;
+                .item(&autostart)
+                .separator()
+                .item(&relaunch)
+                .separator()
+                .item(&about)
+                .item(&quit)
+                .build()?;
 
             app.manage(TrayUi {
                 toggle: toggle.clone(),
                 theme: theme.clone(),
                 about: about.clone(),
                 quit: quit.clone(),
-                elevate: if elevated { None } else { Some(elevate.clone()) },
+                relaunch: relaunch.clone(),
+                is_elevated: elevated,
                 nic: nic_menu.clone(),
                 opacity: opacity_menu.clone(),
                 language: lang_menu.clone(),
@@ -407,7 +421,7 @@ pub fn run() {
                                 .autostart
                                 .set_checked(mgr.is_enabled().unwrap_or(target));
                         }
-                    } else if id == "elevate" {
+                    } else if id == "relaunch" {
                         relaunch_as_admin(app);
                     } else if id == "toggle" {
                         if let Some(w) = app.get_webview_window("main") {
