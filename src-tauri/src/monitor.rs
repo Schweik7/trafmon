@@ -139,26 +139,22 @@ impl MonitorState {
         let dt = (now - self.last_proc_sample).as_secs_f64().max(0.001);
         self.last_proc_sample = now;
 
-        let snapshot = self.netproc.counts_snapshot();
-
-        // Need fresh PID -> name mapping for whatever PIDs are active.
+        // Refresh the live PID set *before* touching the cumulative counts,
+        // then prune the counts map *before* snapshotting it. cb_counts would
+        // otherwise grow with every transient process that ever sent a packet;
+        // after long uptime the snapshot clone got slow enough — while
+        // holding the counts mutex — to back up the IPC pipeline and starve
+        // the ETW callback (visible as a frozen tooltip on hover). Doing the
+        // retain first keeps the lock-held work bounded and the clone tiny.
         self.system
             .refresh_processes(ProcessesToUpdate::All, true);
-
-        // Build the live PID set from sysinfo. We use it for two things:
-        // — bound the cumulative counts map to PIDs that still exist (the map
-        //   would otherwise grow with every transient process and after long
-        //   uptime the per-second snapshot clone gets slow enough to back the
-        //   IPC pipeline up — that's the "tooltip stops responding" symptom);
-        // — bound `prev_proc_counts` the same way.
         let live: HashSet<u32> = self.system.processes().keys().map(|p| p.as_u32()).collect();
         self.netproc.retain_pids(&live);
 
+        let snapshot = self.netproc.counts_snapshot();
+
         let mut entries: Vec<NetProcEntry> = Vec::new();
         for (&pid, &(sent, recv)) in &snapshot {
-            if !live.contains(&pid) {
-                continue;
-            }
             let (psent, precv) = self.prev_proc_counts.get(&pid).copied().unwrap_or((sent, recv));
             let up = (sent.saturating_sub(psent) as f64 / dt) as u64;
             let down = (recv.saturating_sub(precv) as f64 / dt) as u64;
@@ -173,8 +169,8 @@ impl MonitorState {
             entries.push(NetProcEntry { name, up_bps: up, down_bps: down });
         }
 
+        // Snapshot is already bounded to live PIDs, so no extra retain needed.
         self.prev_proc_counts = snapshot;
-        self.prev_proc_counts.retain(|pid, _| live.contains(pid));
 
         NetProcInfo {
             available: true,
