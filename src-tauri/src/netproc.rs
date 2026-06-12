@@ -11,9 +11,10 @@ use ferrisetw::provider::Provider;
 use ferrisetw::schema_locator::SchemaLocator;
 use ferrisetw::trace::UserTrace;
 use ferrisetw::EventRecord;
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 // Microsoft-Windows-Kernel-Network
 const KERNEL_NETWORK_GUID: &str = "7DD42A49-5329-4832-8DFD-43D979153A88";
@@ -31,6 +32,12 @@ pub type Counts = Arc<Mutex<HashMap<u32, (u64, u64)>>>;
 pub struct NetProc {
     counts: Counts,
     available: Arc<AtomicBool>,
+    /// Total matched events since `start`. Monotonic; the monitor watches its
+    /// delta as the ETW heartbeat.
+    events_seen: Arc<AtomicU64>,
+    /// Tells the owning thread to drop the trace and exit. Used to rebuild a
+    /// session that has gone silent.
+    stop: Arc<AtomicBool>,
 }
 
 impl NetProc {
@@ -40,6 +47,26 @@ impl NetProc {
 
     pub fn available(&self) -> bool {
         self.available.load(Ordering::Relaxed)
+    }
+
+    pub fn events_seen(&self) -> u64 {
+        self.events_seen.load(Ordering::Relaxed)
+    }
+
+    /// Drop counts for PIDs that aren't in `live`. The map otherwise grows
+    /// unbounded with every transient process that ever sent a packet, which
+    /// after long uptime makes `counts_snapshot` slow enough to back the IPC
+    /// pipeline up and freeze the tooltip.
+    pub fn retain_pids(&self, live: &HashSet<u32>) {
+        let mut map = self.counts.lock().unwrap();
+        map.retain(|pid, _| live.contains(pid));
+    }
+
+    /// Signal the owning thread to drop the trace and exit. Non-blocking;
+    /// the kernel-side session goes away within a few hundred ms.
+    pub fn shutdown(&self) {
+        self.available.store(false, Ordering::Relaxed);
+        self.stop.store(true, Ordering::Relaxed);
     }
 }
 
@@ -70,14 +97,19 @@ fn stop_stale_sessions() {
     }
 }
 
-/// Start the ETW session on a dedicated, parked thread that owns the trace for
-/// the lifetime of the process. Returns immediately with shared handles.
+/// Start the ETW session on a dedicated thread that owns the trace handle for
+/// the lifetime of this `NetProc`. Returns immediately with shared handles.
+/// Call `shutdown()` to drop the trace; the kernel session ends within ~250 ms.
 pub fn start() -> NetProc {
     let counts: Counts = Arc::new(Mutex::new(HashMap::new()));
     let available = Arc::new(AtomicBool::new(false));
+    let events_seen = Arc::new(AtomicU64::new(0));
+    let stop = Arc::new(AtomicBool::new(false));
 
     let cb_counts = counts.clone();
     let cb_available = available.clone();
+    let cb_events = events_seen.clone();
+    let cb_stop = stop.clone();
 
     std::thread::Builder::new()
         .name("etw-netproc".into())
@@ -86,6 +118,8 @@ pub fn start() -> NetProc {
             // stay under ETW's per-provider 8-session enable limit.
             stop_stale_sessions();
 
+            let counts_cb = cb_counts.clone();
+            let events_cb = cb_events.clone();
             let provider = Provider::by_guid(KERNEL_NETWORK_GUID)
                 .add_callback(move |record: &EventRecord, sl: &SchemaLocator| {
                     let id = record.event_id();
@@ -104,7 +138,9 @@ pub fn start() -> NetProc {
                         .try_parse("PID")
                         .unwrap_or_else(|_| record.process_id());
 
-                    let mut map = cb_counts.lock().unwrap();
+                    events_cb.fetch_add(1, Ordering::Relaxed);
+
+                    let mut map = counts_cb.lock().unwrap();
                     let entry = map.entry(pid).or_insert((0, 0));
                     if is_send {
                         entry.0 += size as u64;
@@ -121,13 +157,16 @@ pub fn start() -> NetProc {
                 .enable(provider)
                 .start_and_process()
             {
-                Ok(_trace) => {
+                Ok(trace) => {
                     cb_available.store(true, Ordering::Relaxed);
-                    // Hold `_trace` for the process lifetime; the actual event
-                    // processing runs on ferrisetw's own spawned thread.
-                    loop {
-                        std::thread::park();
+                    // Hold `trace` here; ferrisetw processes events on its own
+                    // thread. Poll for shutdown so an unhealthy session can be
+                    // torn down and replaced.
+                    while !cb_stop.load(Ordering::Relaxed) {
+                        std::thread::sleep(Duration::from_millis(250));
                     }
+                    cb_available.store(false, Ordering::Relaxed);
+                    drop(trace);
                 }
                 Err(e) => {
                     eprintln!(
@@ -138,5 +177,10 @@ pub fn start() -> NetProc {
         })
         .ok();
 
-    NetProc { counts, available }
+    NetProc {
+        counts,
+        available,
+        events_seen,
+        stop,
+    }
 }

@@ -1,13 +1,21 @@
 use crate::netproc::{self, NetProc};
 use serde::Serialize;
 use std::cmp::Reverse;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use sysinfo::{Networks, Pid, ProcessesToUpdate, System};
 
 const WIFI_KEYWORDS: [&str; 5] = ["wi-fi", "wifi", "wlan", "wireless", "wi_fi"];
 const LOOPBACK_NAMES: [&str; 2] = ["lo", "Loopback Pseudo-Interface 1"];
+
+// ETW heartbeat: after long uptimes Microsoft-Windows-Kernel-Network sometimes
+// stops emitting events while the kernel counters keep moving. Watch the event
+// rate against sysinfo throughput, and rebuild the session when starved.
+const ETW_STARVE_BYTES_PER_SEC: u64 = 10_000;
+const ETW_STARVE_SAMPLES: u32 = 5;
+const ETW_WARMUP: Duration = Duration::from_secs(5);
+const ETW_REBUILD_COOLDOWN: Duration = Duration::from_secs(30);
 
 #[derive(Serialize, Clone)]
 pub struct NetStats {
@@ -40,6 +48,14 @@ pub struct MonitorState {
     netproc: NetProc,
     prev_proc_counts: HashMap<u32, (u64, u64)>,
     last_proc_sample: Instant,
+    /// Combined up + down bps on the selected interface, captured by the most
+    /// recent `refresh_net`. Used by the ETW heartbeat to decide whether
+    /// "no events" means the network is idle or the trace has died.
+    last_iface_bps: u64,
+    netproc_started_at: Instant,
+    last_etw_restart: Instant,
+    prev_events_seen: u64,
+    consec_starved: u32,
 }
 
 impl MonitorState {
@@ -57,6 +73,7 @@ impl MonitorState {
             prev_tx.insert(name.clone(), data.total_transmitted());
         }
 
+        let now = Instant::now();
         Self {
             system: System::new(),
             networks,
@@ -65,7 +82,12 @@ impl MonitorState {
             prev_tx,
             netproc: netproc::start(),
             prev_proc_counts: HashMap::new(),
-            last_proc_sample: Instant::now(),
+            last_proc_sample: now,
+            last_iface_bps: 0,
+            netproc_started_at: now,
+            last_etw_restart: now,
+            prev_events_seen: 0,
+            consec_starved: 0,
         }
     }
 
@@ -89,6 +111,8 @@ impl MonitorState {
             })
             .unwrap_or((0, 0));
 
+        self.last_iface_bps = upload_bps.saturating_add(download_bps);
+
         NetStats {
             interface: self.selected_iface.clone(),
             upload_bps,
@@ -98,6 +122,11 @@ impl MonitorState {
     }
 
     pub fn refresh_net_processes(&mut self) -> NetProcInfo {
+        // ETW heartbeat: if the trace died (sysinfo sees traffic but the
+        // callback never fires), tear it down and start a new one. Cooldown
+        // prevents bouncing during legitimate idle periods.
+        self.maybe_rebuild_etw();
+
         if !self.netproc.available() {
             return NetProcInfo {
                 available: false,
@@ -116,8 +145,20 @@ impl MonitorState {
         self.system
             .refresh_processes(ProcessesToUpdate::All, true);
 
+        // Build the live PID set from sysinfo. We use it for two things:
+        // — bound the cumulative counts map to PIDs that still exist (the map
+        //   would otherwise grow with every transient process and after long
+        //   uptime the per-second snapshot clone gets slow enough to back the
+        //   IPC pipeline up — that's the "tooltip stops responding" symptom);
+        // — bound `prev_proc_counts` the same way.
+        let live: HashSet<u32> = self.system.processes().keys().map(|p| p.as_u32()).collect();
+        self.netproc.retain_pids(&live);
+
         let mut entries: Vec<NetProcEntry> = Vec::new();
         for (&pid, &(sent, recv)) in &snapshot {
+            if !live.contains(&pid) {
+                continue;
+            }
             let (psent, precv) = self.prev_proc_counts.get(&pid).copied().unwrap_or((sent, recv));
             let up = (sent.saturating_sub(psent) as f64 / dt) as u64;
             let down = (recv.saturating_sub(precv) as f64 / dt) as u64;
@@ -133,11 +174,50 @@ impl MonitorState {
         }
 
         self.prev_proc_counts = snapshot;
+        self.prev_proc_counts.retain(|pid, _| live.contains(pid));
 
         NetProcInfo {
             available: true,
             interface: self.selected_iface.clone(),
             procs: top_net_procs(entries, 5),
+        }
+    }
+
+    /// Tear down and restart the ETW trace if it has gone quiet despite real
+    /// traffic. Called once per `refresh_net_processes`.
+    fn maybe_rebuild_etw(&mut self) {
+        let now = Instant::now();
+        if now.duration_since(self.netproc_started_at) < ETW_WARMUP {
+            return;
+        }
+
+        let events = self.netproc.events_seen();
+        let new_events = events.saturating_sub(self.prev_events_seen);
+        self.prev_events_seen = events;
+
+        let starved = self.netproc.available()
+            && new_events == 0
+            && self.last_iface_bps >= ETW_STARVE_BYTES_PER_SEC;
+        if starved {
+            self.consec_starved += 1;
+        } else {
+            self.consec_starved = 0;
+        }
+
+        if self.consec_starved >= ETW_STARVE_SAMPLES
+            && now.duration_since(self.last_etw_restart) > ETW_REBUILD_COOLDOWN
+        {
+            eprintln!(
+                "[trafmon] ETW session starved ({} s of traffic, 0 events); rebuilding",
+                self.consec_starved
+            );
+            self.netproc.shutdown();
+            self.netproc = netproc::start();
+            self.netproc_started_at = now;
+            self.last_etw_restart = now;
+            self.prev_events_seen = 0;
+            self.consec_starved = 0;
+            self.prev_proc_counts.clear();
         }
     }
 
